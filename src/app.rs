@@ -124,20 +124,19 @@ impl App {
     pub fn reload_data(&mut self) {
         for proj in &mut self.projects {
             proj.branches.clear();
-            if proj.enabled {
-                if let Ok(mut branches) = git_utils::get_commits(&proj.path, &self.author_filter, self.date_start_filter, self.date_end_filter) {
+            if proj.enabled
+                && let Ok(mut branches) = git_utils::get_commits(&proj.path, &self.author_filter, self.date_start_filter, self.date_end_filter) {
                     for b in &mut branches {
-                        b.commits.sort_by(|a, b| b.date.cmp(&a.date));
+                        b.commits.sort_by_key(|c| std::cmp::Reverse(c.date));
                     }
                     proj.branches = branches;
                 }
-            }
         }
     }
 
     pub fn toggle_project(&mut self) {
-        if let Some(idx) = self.selected_project_idx {
-            if idx < self.projects.len() {
+        if let Some(idx) = self.selected_project_idx
+            && idx < self.projects.len() {
                 self.projects[idx].enabled = !self.projects[idx].enabled;
                 
                 // Update profile
@@ -153,12 +152,11 @@ impl App {
                 
                 self.reload_data();
             }
-        }
     }
 
     pub fn remove_project(&mut self) {
-        if let Some(idx) = self.selected_project_idx {
-            if idx < self.projects.len() {
+        if let Some(idx) = self.selected_project_idx
+            && idx < self.projects.len() {
                 let removed_path = self.projects[idx].path.clone();
                 self.current_profile.removed_projects.push(removed_path);
                 self.config.update_active_profile(self.current_profile.clone());
@@ -174,7 +172,6 @@ impl App {
                 }
                 self.commit_list_state.select(None);
             }
-        }
     }
 
     pub fn quit(&mut self) {
@@ -260,15 +257,14 @@ impl App {
     }
 
     pub fn enter_details(&mut self) {
-        if self.selected_project_idx.is_some() {
-            if let Some(proj_idx) = self.selected_project_idx {
+        if self.selected_project_idx.is_some()
+            && let Some(proj_idx) = self.selected_project_idx {
                 let total_commits: usize = self.projects[proj_idx].branches.iter().map(|b| b.commits.len()).sum();
                 if total_commits > 0 {
                     self.mode = AppMode::Details;
                     self.commit_list_state.select(Some(0));
                 }
             }
-        }
     }
 
     pub fn leave_details(&mut self) {

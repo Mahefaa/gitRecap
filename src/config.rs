@@ -37,13 +37,11 @@ impl AppConfig {
 
     pub fn load() -> Self {
         let path = Self::get_config_path();
-        if path.exists() {
-            if let Ok(data) = fs::read_to_string(&path) {
-                if let Ok(config) = serde_json::from_str(&data) {
+        if path.exists()
+            && let Ok(data) = fs::read_to_string(&path)
+                && let Ok(config) = serde_json::from_str(&data) {
                     return config;
                 }
-            }
-        }
         
         Self {
             active_profile: "default".to_string(),
@@ -84,5 +82,21 @@ impl AppConfig {
         }
         self.save();
         self.get_active_profile()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let config = AppConfig {
+            profiles: vec![AppProfile::default()],
+            active_profile: "default".to_string(),
+        };
+        assert_eq!(config.profiles.len(), 1);
+        assert_eq!(config.profiles[0].name, "default");
+        assert_eq!(config.active_profile, "default");
     }
 }

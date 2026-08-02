@@ -23,11 +23,10 @@ pub fn find_git_repos(base_path: &Path) -> Vec<PathBuf> {
     });
 
     for entry in walker.filter_map(|e| e.ok()) {
-        if entry.file_name() == ".git" && entry.file_type().is_dir() {
-            if let Some(parent) = entry.path().parent() {
+        if entry.file_name() == ".git" && entry.file_type().is_dir()
+            && let Some(parent) = entry.path().parent() {
                 repos.push(parent.to_path_buf());
             }
-        }
     }
     repos
 }
@@ -47,8 +46,8 @@ pub fn get_commits(
             let branch_name = branch.name().unwrap_or(Some("unknown")).unwrap_or("unknown").to_string();
             
             let mut commits = Vec::new();
-            if let Some(target) = branch.get().target() {
-                if let Ok(mut revwalk) = repo.revwalk() {
+            if let Some(target) = branch.get().target()
+                && let Ok(mut revwalk) = repo.revwalk() {
                     let _ = revwalk.push(target);
                     let _ = revwalk.set_sorting(git2::Sort::TIME);
                     
@@ -59,11 +58,10 @@ pub fn get_commits(
                                 let local_time: DateTime<Local> = date_time.into();
                                 let naive_date = local_time.date_naive();
                                 
-                                if naive_date < start_date {
-                                    if (start_date - naive_date).num_days() > 7 {
+                                if naive_date < start_date
+                                    && (start_date - naive_date).num_days() > 7 {
                                         break;
                                     }
-                                }
                                 
                                 if naive_date >= start_date && naive_date <= end_date {
                                     let author = commit.author();
@@ -89,7 +87,6 @@ pub fn get_commits(
                         }
                     }
                 }
-            }
             
             if !commits.is_empty() {
                 branch_commits.push(BranchCommits { name: branch_name, commits });
@@ -103,13 +100,11 @@ pub fn get_commits(
 fn is_commit_pushed(repo: &Repository, commit_id: git2::Oid) -> bool {
     if let Ok(branches) = repo.branches(Some(git2::BranchType::Remote)) {
         for branch in branches.filter_map(|b| b.ok()) {
-            if let Some(target) = branch.0.get().target() {
-                if let Ok(base) = repo.merge_base(commit_id, target) {
-                    if base == commit_id {
+            if let Some(target) = branch.0.get().target()
+                && let Ok(base) = repo.merge_base(commit_id, target)
+                    && base == commit_id {
                         return true;
                     }
-                }
-            }
         }
     }
     false
@@ -117,8 +112,8 @@ fn is_commit_pushed(repo: &Repository, commit_id: git2::Oid) -> bool {
 
 pub fn get_recent_authors(repo_path: &Path) -> Vec<String> {
     let mut authors = Vec::new();
-    if let Ok(repo) = Repository::open(repo_path) {
-        if let Ok(mut revwalk) = repo.revwalk() {
+    if let Ok(repo) = Repository::open(repo_path)
+        && let Ok(mut revwalk) = repo.revwalk() {
             let _ = revwalk.push_head();
             for oid in revwalk.filter_map(|id| id.ok()).take(50) {
                 if let Ok(commit) = repo.find_commit(oid) {
@@ -129,6 +124,5 @@ pub fn get_recent_authors(repo_path: &Path) -> Vec<String> {
                 }
             }
         }
-    }
     authors
 }

@@ -37,8 +37,8 @@ impl FileExplorerState {
         
         let search_term = self.search_input.value().to_lowercase();
 
-        if let Some(parent) = self.current_path.parent() {
-            if search_term.is_empty() {
+        if let Some(parent) = self.current_path.parent()
+            && search_term.is_empty() {
                 self.entries.push(FileEntry {
                     path: parent.to_path_buf(),
                     name: "..".to_string(),
@@ -46,7 +46,6 @@ impl FileExplorerState {
                     is_git_repo: false,
                 });
             }
-        }
 
         if let Ok(read_dir) = fs::read_dir(&self.current_path) {
             for entry in read_dir.flatten() {
@@ -107,8 +106,8 @@ impl FileExplorerState {
     }
     
     pub fn enter_directory(&mut self) {
-        if let Some(idx) = self.list_state.selected() {
-            if idx < self.entries.len() {
+        if let Some(idx) = self.list_state.selected()
+            && idx < self.entries.len() {
                 let entry = &self.entries[idx];
                 if entry.is_dir {
                     self.current_path = entry.path.clone();
@@ -117,7 +116,6 @@ impl FileExplorerState {
                     self.load_directory();
                 }
             }
-        }
     }
     
     pub fn go_up(&mut self) {
@@ -130,11 +128,10 @@ impl FileExplorerState {
     }
     
     pub fn get_selected_path(&self) -> Option<PathBuf> {
-        if let Some(idx) = self.list_state.selected() {
-            if idx < self.entries.len() {
+        if let Some(idx) = self.list_state.selected()
+            && idx < self.entries.len() {
                 return Some(self.entries[idx].path.clone());
             }
-        }
         None
     }
 }

@@ -216,8 +216,8 @@ fn render_projects_list(f: &mut Frame, app: &mut App, area: Rect) {
 fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
     let mut items = Vec::new();
 
-    if let Some(idx) = app.selected_project_idx {
-        if idx < app.projects.len() {
+    if let Some(idx) = app.selected_project_idx
+        && idx < app.projects.len() {
             for branch in &app.projects[idx].branches {
                 items.push(ListItem::new(Line::from(vec![
                     Span::styled(format!("Branch: {} ", branch.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
@@ -242,7 +242,6 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                 }
             }
         }
-    }
 
     let mut block = Block::default().borders(Borders::ALL).title("Commits");
     if let AppMode::Details = app.mode {
@@ -263,7 +262,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
 
 fn render_author_autocomplete(f: &mut Frame, app: &mut App, area: Rect) {
     let filtered = app.get_filtered_authors();
-    let items: Vec<ListItem> = filtered.into_iter().map(|a| ListItem::new(a)).collect();
+    let items: Vec<ListItem> = filtered.into_iter().map(ListItem::new).collect();
     
     let block = Block::default()
         .borders(Borders::ALL)
