@@ -23,11 +23,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         .split(f.area());
 
     // Top Bar
-    let date_display = if app.date_start_filter == app.date_end_filter {
-        app.date_start_filter.format("%Y-%m-%d").to_string()
-    } else {
-        format!("{}..{}", app.date_start_filter.format("%Y-%m-%d"), app.date_end_filter.format("%Y-%m-%d"))
-    };
+    let date_display = format!("{}..{}", app.date_start_filter.format("%Y-%m-%d"), app.date_end_filter.format("%Y-%m-%d"));
     let filter_text = format!(
         "Profile: [{}] | Date: {} | Author: '{}' | Sources: {}",
         app.current_profile.name,

@@ -286,11 +286,7 @@ impl App {
                 self.author_list_state.select(Some(0));
             },
             AppMode::InputDate => {
-                let display = if self.date_start_filter.date_naive() == self.date_end_filter.date_naive() {
-                    self.date_start_filter.format("%Y-%m-%d").to_string()
-                } else {
-                    format!("{}..{}", self.date_start_filter.format("%Y-%m-%d"), self.date_end_filter.format("%Y-%m-%d"))
-                };
+                let display = format!("{}..{}", self.date_start_filter.format("%Y-%m-%d"), self.date_end_filter.format("%Y-%m-%d"));
                 self.input = self.input.clone().with_value(display);
             },
             AppMode::InputProfile => {
