@@ -37,3 +37,6 @@ When you launch the app, you will start in `Normal` mode.
 
 ## Contributing
 See [CONTRIBUTING_AI.md](CONTRIBUTING_AI.md) for architecture details and AI-agent guidelines.
+
+## Credits
+Developed by **Antigravity AI**, working under the expert guidance and supervision of the big boss, **Mahefa (@Mahefaa)**.
