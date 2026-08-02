@@ -1,5 +1,5 @@
 use crate::git_utils::{self, BranchCommits};
-use chrono::{Local, NaiveDate};
+use chrono::{Local, NaiveDate, TimeZone, Datelike};
 use ratatui::widgets::ListState;
 use std::collections::HashSet;
 use std::error::Error;
@@ -26,8 +26,8 @@ pub struct ProjectData {
 
 pub struct App {
     pub author_filter: String,
-    pub date_start_filter: NaiveDate,
-    pub date_end_filter: NaiveDate,
+    pub date_start_filter: chrono::DateTime<Local>,
+    pub date_end_filter: chrono::DateTime<Local>,
     pub sources: Vec<PathBuf>,
     pub projects: Vec<ProjectData>,
     pub project_list_state: ListState,
@@ -47,8 +47,8 @@ impl App {
     pub fn new() -> App {
         let mut app = App {
             author_filter: "Any".to_string(),
-            date_start_filter: Local::now().date_naive(),
-            date_end_filter: Local::now().date_naive(),
+            date_start_filter: Local::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_local_timezone(Local).unwrap(),
+            date_end_filter: Local::now().date_naive().and_hms_opt(23, 59, 59).unwrap().and_local_timezone(Local).unwrap(),
             sources: vec![PathBuf::from(".")],
             projects: Vec::new(),
             project_list_state: ListState::default(),
@@ -281,7 +281,7 @@ impl App {
                 self.author_list_state.select(Some(0));
             },
             AppMode::InputDate => {
-                let display = if self.date_start_filter == self.date_end_filter {
+                let display = if self.date_start_filter.date_naive() == self.date_end_filter.date_naive() {
                     self.date_start_filter.format("%Y-%m-%d").to_string()
                 } else {
                     format!("{}..{}", self.date_start_filter.format("%Y-%m-%d"), self.date_end_filter.format("%Y-%m-%d"))
@@ -323,20 +323,9 @@ impl App {
                 self.reload_data();
             }
             AppMode::InputDate => {
-                let val = self.input.value().trim();
-                let parts: Vec<&str> = val.split("..").collect();
-                if parts.len() == 2 {
-                    if let (Ok(d1), Ok(d2)) = (
-                        NaiveDate::parse_from_str(parts[0].trim(), "%Y-%m-%d"),
-                        NaiveDate::parse_from_str(parts[1].trim(), "%Y-%m-%d"),
-                    ) {
-                        self.date_start_filter = d1;
-                        self.date_end_filter = d2;
-                        self.reload_data();
-                    }
-                } else if let Ok(d) = NaiveDate::parse_from_str(val, "%Y-%m-%d") {
-                    self.date_start_filter = d;
-                    self.date_end_filter = d;
+                if let Some((start, end)) = parse_date_input(self.input.value()) {
+                    self.date_start_filter = start;
+                    self.date_end_filter = end;
                     self.reload_data();
                 }
             }
@@ -398,3 +387,104 @@ impl App {
         Ok(())
     }
 }
+
+fn parse_date_input(input: &str) -> Option<(chrono::DateTime<Local>, chrono::DateTime<Local>)> {
+    let now = Local::now();
+    let input = input.trim().to_lowercase();
+    
+    let day_range = |d: NaiveDate| -> (chrono::DateTime<Local>, chrono::DateTime<Local>) {
+        let start = d.and_hms_opt(0, 0, 0).unwrap().and_local_timezone(Local).unwrap();
+        let end = d.and_hms_opt(23, 59, 59).unwrap().and_local_timezone(Local).unwrap();
+        (start, end)
+    };
+
+    if input == "startofday" {
+        return Some((day_range(now.date_naive()).0, now));
+    } else if input == "endofday" {
+        return Some((now, day_range(now.date_naive()).1));
+    } else if input == "today" {
+        return Some(day_range(now.date_naive()));
+    } else if input == "startofmonth" {
+        let d = NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap();
+        return Some((day_range(d).0, now));
+    } else if input == "endofmonth" {
+        let next_month = if now.month() == 12 { 1 } else { now.month() + 1 };
+        let next_year = if now.month() == 12 { now.year() + 1 } else { now.year() };
+        let d = NaiveDate::from_ymd_opt(next_year, next_month, 1).unwrap().pred_opt().unwrap();
+        return Some((now, day_range(d).1));
+    }
+    
+    if input.starts_with("month(") && input.ends_with(')') {
+        let inner = &input[6..input.len()-1];
+        let mut year = now.year();
+        let mut month = now.month();
+        let chars: String = inner.chars().filter(|c| c.is_alphabetic()).collect();
+        let nums: String = inner.chars().filter(|c| c.is_numeric()).collect();
+        
+        if !nums.is_empty() {
+            if let Ok(y) = nums.parse::<i32>() {
+                if y < 100 { year = 2000 + y; } else { year = y; }
+            }
+        }
+        
+        let m_str = chars.as_str();
+        if !m_str.is_empty() {
+            match m_str {
+                "jan" | "january" => month = 1,
+                "feb" | "february" => month = 2,
+                "mar" | "march" => month = 3,
+                "apr" | "april" => month = 4,
+                "may" => month = 5,
+                "jun" | "june" => month = 6,
+                "jul" | "july" => month = 7,
+                "aug" | "august" => month = 8,
+                "sep" | "september" => month = 9,
+                "oct" | "october" => month = 10,
+                "nov" | "november" => month = 11,
+                "dec" | "december" => month = 12,
+                _ => {}
+            }
+        } else if !nums.is_empty() {
+            if let Ok(m) = nums.parse::<u32>() {
+                if (1..=12).contains(&m) {
+                    month = m;
+                    year = now.year();
+                }
+            }
+        }
+        
+        if let Some(start_d) = NaiveDate::from_ymd_opt(year, month, 1) {
+            let next_m = if month == 12 { 1 } else { month + 1 };
+            let next_y = if month == 12 { year + 1 } else { year };
+            if let Some(end_d) = NaiveDate::from_ymd_opt(next_y, next_m, 1).unwrap().pred_opt() {
+                return Some((day_range(start_d).0, day_range(end_d).1));
+            }
+        }
+    }
+
+    let parts: Vec<&str> = input.split("..").collect();
+    if parts.len() == 2 {
+        let d1 = chrono::NaiveDateTime::parse_from_str(parts[0].trim(), "%Y-%m-%d %H:%M:%S")
+            .map(|d| d.and_local_timezone(Local).unwrap())
+            .or_else(|_| NaiveDate::parse_from_str(parts[0].trim(), "%Y-%m-%d").map(|d| day_range(d).0));
+            
+        let d2 = chrono::NaiveDateTime::parse_from_str(parts[1].trim(), "%Y-%m-%d %H:%M:%S")
+            .map(|d| d.and_local_timezone(Local).unwrap())
+            .or_else(|_| NaiveDate::parse_from_str(parts[1].trim(), "%Y-%m-%d").map(|d| day_range(d).1));
+            
+        if let (Ok(start), Ok(end)) = (d1, d2) {
+            return Some((start, end));
+        }
+    } else {
+        let d1 = chrono::NaiveDateTime::parse_from_str(input.trim(), "%Y-%m-%d %H:%M:%S")
+            .map(|d| d.and_local_timezone(Local).unwrap())
+            .or_else(|_| NaiveDate::parse_from_str(input.trim(), "%Y-%m-%d").map(|d| day_range(d).0));
+        
+        if let Ok(start) = d1 {
+            let end = NaiveDate::parse_from_str(input.trim(), "%Y-%m-%d").map(|d| day_range(d).1).unwrap_or(start);
+            return Some((start, end));
+        }
+    }
+    None
+}
+

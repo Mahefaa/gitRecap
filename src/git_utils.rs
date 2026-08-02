@@ -34,8 +34,8 @@ pub fn find_git_repos(base_path: &Path) -> Vec<PathBuf> {
 pub fn get_commits(
     repo_path: &Path,
     author_name: &str,
-    start_date: chrono::NaiveDate,
-    end_date: chrono::NaiveDate,
+    start_date: chrono::DateTime<chrono::Local>,
+    end_date: chrono::DateTime<chrono::Local>,
 ) -> Result<Vec<BranchCommits>, git2::Error> {
     let repo = Repository::open(repo_path)?;
     let mut branch_commits = Vec::new();
@@ -53,35 +53,35 @@ pub fn get_commits(
                     
                     for oid in revwalk.filter_map(|id| id.ok()) {
                         if let Ok(commit) = repo.find_commit(oid) {
-                            let time = commit.time();
-                            if let Some(date_time) = chrono::DateTime::from_timestamp(time.seconds(), 0) {
-                                let local_time: DateTime<Local> = date_time.into();
-                                let naive_date = local_time.date_naive();
+                            let commit_time = commit.time().seconds();
+                            let start_ts = start_date.timestamp();
+                            let end_ts = end_date.timestamp();
+                            
+                            if commit_time < start_ts
+                                && (start_ts - commit_time) > 7 * 24 * 3600 {
+                                    break;
+                                }
+                            
+                            if commit_time >= start_ts && commit_time <= end_ts {
+                                let author = commit.author();
+                                let author_str = author.name().unwrap_or("").to_lowercase();
+                                let filter_author = author_name.to_lowercase();
                                 
-                                if naive_date < start_date
-                                    && (start_date - naive_date).num_days() > 7 {
-                                        break;
-                                    }
-                                
-                                if naive_date >= start_date && naive_date <= end_date {
-                                    let author = commit.author();
-                                    let author_str = author.name().unwrap_or("").to_lowercase();
-                                    let filter_author = author_name.to_lowercase();
+                                if filter_author.is_empty() || filter_author == "any" || author_str.contains(&filter_author) {
+                                    let is_pushed = is_commit_pushed(&repo, oid);
+                                    let msg_bytes = commit.message_bytes();
+                                    let msg_str = String::from_utf8_lossy(msg_bytes);
+                                    let summary = msg_str.lines().next().unwrap_or("").to_string();
                                     
-                                    if filter_author.is_empty() || filter_author == "any" || author_str.contains(&filter_author) {
-                                        let is_pushed = is_commit_pushed(&repo, oid);
-                                        let msg_bytes = commit.message_bytes();
-                                        let msg_str = String::from_utf8_lossy(msg_bytes);
-                                        let summary = msg_str.lines().next().unwrap_or("").to_string();
-                                        
-                                        commits.push(GitCommit {
-                                            id: oid.to_string(),
-                                            message: summary,
-                                            author: author.name().unwrap_or("").to_string(),
-                                            date: local_time,
-                                            is_pushed,
-                                        });
-                                    }
+                                    let local_time = chrono::DateTime::from_timestamp(commit_time, 0).unwrap_or_default().into();
+                                    
+                                    commits.push(GitCommit {
+                                        id: oid.to_string(),
+                                        message: summary,
+                                        author: author.name().unwrap_or("").to_string(),
+                                        date: local_time,
+                                        is_pushed,
+                                    });
                                 }
                             }
                         }

@@ -59,6 +59,11 @@ fn run_app(
                     KeyCode::Char('P') => app.enter_input_mode(AppMode::InputProfile),
                     KeyCode::Char(' ') => app.toggle_project(),
                     KeyCode::Char('r') | KeyCode::Delete => app.remove_project(),
+                    KeyCode::Char('.') => {
+                        if let Ok(cwd) = std::env::current_dir() {
+                            app.add_source(cwd);
+                        }
+                    }
                     KeyCode::Char('e') => {
                         let _ = app.export_summary("summary.txt");
                     }
