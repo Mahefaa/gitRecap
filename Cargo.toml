@@ -1,0 +1,15 @@
+[package]
+name = "git-recap"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = "0.4.45"
+clap = { version = "4.6.5", features = ["derive"] }
+crossterm = "0.29.0"
+git2 = "0.21.0"
+ratatui = "0.30.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+tui-input = "0.15.3"
+walkdir = "2.5.0"
