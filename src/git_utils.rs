@@ -35,7 +35,8 @@ pub fn find_git_repos(base_path: &Path) -> Vec<PathBuf> {
 pub fn get_commits(
     repo_path: &Path,
     author_name: &str,
-    target_date: chrono::NaiveDate,
+    start_date: chrono::NaiveDate,
+    end_date: chrono::NaiveDate,
 ) -> Result<Vec<BranchCommits>, git2::Error> {
     let repo = Repository::open(repo_path)?;
     let mut branch_commits = Vec::new();
@@ -58,13 +59,13 @@ pub fn get_commits(
                                 let local_time: DateTime<Local> = date_time.into();
                                 let naive_date = local_time.date_naive();
                                 
-                                if naive_date < target_date {
-                                    if (target_date - naive_date).num_days() > 7 {
+                                if naive_date < start_date {
+                                    if (start_date - naive_date).num_days() > 7 {
                                         break;
                                     }
                                 }
                                 
-                                if naive_date == target_date {
+                                if naive_date >= start_date && naive_date <= end_date {
                                     let author = commit.author();
                                     let author_str = author.name().unwrap_or("").to_lowercase();
                                     let filter_author = author_name.to_lowercase();

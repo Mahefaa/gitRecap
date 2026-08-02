@@ -26,7 +26,8 @@ pub struct ProjectData {
 
 pub struct App {
     pub author_filter: String,
-    pub date_filter: NaiveDate,
+    pub date_start_filter: NaiveDate,
+    pub date_end_filter: NaiveDate,
     pub sources: Vec<PathBuf>,
     pub projects: Vec<ProjectData>,
     pub project_list_state: ListState,
@@ -46,7 +47,8 @@ impl App {
     pub fn new() -> App {
         let mut app = App {
             author_filter: "Any".to_string(),
-            date_filter: Local::now().date_naive(),
+            date_start_filter: Local::now().date_naive(),
+            date_end_filter: Local::now().date_naive(),
             sources: vec![PathBuf::from(".")],
             projects: Vec::new(),
             project_list_state: ListState::default(),
@@ -123,7 +125,7 @@ impl App {
         for proj in &mut self.projects {
             proj.branches.clear();
             if proj.enabled {
-                if let Ok(mut branches) = git_utils::get_commits(&proj.path, &self.author_filter, self.date_filter) {
+                if let Ok(mut branches) = git_utils::get_commits(&proj.path, &self.author_filter, self.date_start_filter, self.date_end_filter) {
                     for b in &mut branches {
                         b.commits.sort_by(|a, b| b.date.cmp(&a.date));
                     }
@@ -283,7 +285,12 @@ impl App {
                 self.author_list_state.select(Some(0));
             },
             AppMode::InputDate => {
-                self.input = self.input.clone().with_value(self.date_filter.format("%Y-%m-%d").to_string());
+                let display = if self.date_start_filter == self.date_end_filter {
+                    self.date_start_filter.format("%Y-%m-%d").to_string()
+                } else {
+                    format!("{}..{}", self.date_start_filter.format("%Y-%m-%d"), self.date_end_filter.format("%Y-%m-%d"))
+                };
+                self.input = self.input.clone().with_value(display);
             },
             AppMode::InputProfile => {
                 self.input = self.input.clone().with_value(self.current_profile.name.clone());
@@ -320,8 +327,20 @@ impl App {
                 self.reload_data();
             }
             AppMode::InputDate => {
-                if let Ok(d) = NaiveDate::parse_from_str(self.input.value(), "%Y-%m-%d") {
-                    self.date_filter = d;
+                let val = self.input.value().trim();
+                let parts: Vec<&str> = val.split("..").collect();
+                if parts.len() == 2 {
+                    if let (Ok(d1), Ok(d2)) = (
+                        NaiveDate::parse_from_str(parts[0].trim(), "%Y-%m-%d"),
+                        NaiveDate::parse_from_str(parts[1].trim(), "%Y-%m-%d"),
+                    ) {
+                        self.date_start_filter = d1;
+                        self.date_end_filter = d2;
+                        self.reload_data();
+                    }
+                } else if let Ok(d) = NaiveDate::parse_from_str(val, "%Y-%m-%d") {
+                    self.date_start_filter = d;
+                    self.date_end_filter = d;
                     self.reload_data();
                 }
             }

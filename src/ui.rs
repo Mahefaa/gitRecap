@@ -23,10 +23,15 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         .split(f.area());
 
     // Top Bar
+    let date_display = if app.date_start_filter == app.date_end_filter {
+        app.date_start_filter.format("%Y-%m-%d").to_string()
+    } else {
+        format!("{}..{}", app.date_start_filter.format("%Y-%m-%d"), app.date_end_filter.format("%Y-%m-%d"))
+    };
     let filter_text = format!(
         "Profile: [{}] | Date: {} | Author: '{}' | Sources: {}",
         app.current_profile.name,
-        app.date_filter.format("%Y-%m-%d"),
+        date_display,
         if app.author_filter.is_empty() { "Any" } else { &app.author_filter },
         app.sources.len()
     );
@@ -89,7 +94,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             
             let input_widget = Paragraph::new(app.input.value())
                 .style(Style::default().fg(Color::Yellow))
-                .block(Block::default().borders(Borders::ALL).title("Enter Date [YYYY-MM-DD] (Esc to cancel, Enter to submit)"));
+                .block(Block::default().borders(Borders::ALL).title("Enter Date [YYYY-MM-DD] or Range [YYYY-MM-DD..YYYY-MM-DD] (Esc cancel, Enter submit)"));
             f.render_widget(input_widget, chunks[2]);
             #[allow(clippy::cast_possible_truncation)]
             f.set_cursor_position((
