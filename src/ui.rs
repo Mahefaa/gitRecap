@@ -59,7 +59,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                     chunks[2].y + 1,
                 ));
             } else {
-                let footer = Paragraph::new("Esc: Cancel | j/k: Navigate | l/Enter: Enter Dir | h/Backspace: Go Up | s: Add as Source | /: Search")
+                let footer = Paragraph::new("Esc: Cancel | j/k: Nav | gg/G: Top/Bot | m<c> / '<c>: Marks | s: Add Selected | S: Add Current Dir | : Jump Path | /: Search")
                     .block(Block::default().borders(Borders::ALL));
                 f.render_widget(footer, chunks[2]);
             }
@@ -121,6 +121,31 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 chunks[2].y + 1,
             ));
         },
+        AppMode::InputAddSource | AppMode::ExplorerJumpPath => {
+            let main_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+                .split(chunks[1]);
+                
+            render_projects_list(f, app, main_chunks[0]);
+            render_commits_list(f, app, main_chunks[1]);
+            
+            let title = if matches!(app.mode, AppMode::InputAddSource) {
+                "Manually add source path (Esc to cancel, Enter to submit)"
+            } else {
+                "Jump explorer to path (Esc to cancel, Enter to submit)"
+            };
+            
+            let input_widget = Paragraph::new(app.input.value())
+                .style(Style::default().fg(Color::Yellow))
+                .block(Block::default().borders(Borders::ALL).title(title));
+            f.render_widget(input_widget, chunks[2]);
+            #[allow(clippy::cast_possible_truncation)]
+            f.set_cursor_position((
+                chunks[2].x + 1 + app.input.visual_cursor() as u16,
+                chunks[2].y + 1,
+            ));
+        },
         AppMode::Normal | AppMode::Details => {
             let main_chunks = Layout::default()
                 .direction(Direction::Horizontal)
@@ -131,7 +156,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             render_commits_list(f, app, main_chunks[1]);
             
             let help_text = match app.mode {
-                AppMode::Normal => "q: Quit | P: Profile | a: Author | d: Date | p: Add Path | l/Enter: Commits | Space: Toggle | r: Remove | e: Export | u: Push | U: Force Push",
+                AppMode::Normal => "q: Quit | P: Profile | a: Author | d: Date | p: Explorer | A: Add Path Manually | l/Enter: Commits | Space: Toggle | r: Remove | e: Export | u: Push | U: Force Push",
                 AppMode::Details => "q: Quit | h/Esc: Back | j/k: Navigate Commits | e: Export",
                 _ => "",
             };

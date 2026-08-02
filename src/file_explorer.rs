@@ -1,4 +1,5 @@
 use ratatui::widgets::ListState;
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use tui_input::Input;
@@ -17,6 +18,8 @@ pub struct FileExplorerState {
     pub list_state: ListState,
     pub search_input: Input,
     pub is_searching: bool,
+    pub vim_buffer: String,
+    pub marks: HashMap<char, PathBuf>,
 }
 
 impl FileExplorerState {
@@ -27,6 +30,8 @@ impl FileExplorerState {
             list_state: ListState::default(),
             search_input: Input::default(),
             is_searching: false,
+            vim_buffer: String::new(),
+            marks: HashMap::new(),
         };
         fe.load_directory();
         fe
@@ -133,5 +138,65 @@ impl FileExplorerState {
                 return Some(self.entries[idx].path.clone());
             }
         None
+    }
+
+    pub fn handle_vim_key(&mut self, key: char) {
+        if key.is_numeric() && self.vim_buffer != "m" && self.vim_buffer != "'" {
+            self.vim_buffer.push(key);
+            return;
+        }
+
+        match key {
+            'g' => {
+                if self.vim_buffer == "g" {
+                    if !self.entries.is_empty() {
+                        self.list_state.select(Some(0));
+                    }
+                    self.vim_buffer.clear();
+                } else {
+                    self.vim_buffer.push('g');
+                }
+            }
+            'G' => {
+                if self.vim_buffer.is_empty() {
+                    let last_idx = self.entries.len().saturating_sub(1);
+                    self.list_state.select(Some(last_idx));
+                } else if let Ok(line_num) = self.vim_buffer.parse::<usize>() {
+                    let idx = line_num.saturating_sub(1).min(self.entries.len().saturating_sub(1));
+                    self.list_state.select(Some(idx));
+                }
+                self.vim_buffer.clear();
+            }
+            'm' => {
+                self.vim_buffer.push('m');
+            }
+            '\'' => {
+                self.vim_buffer.push('\'');
+            }
+            c if self.vim_buffer == "m" => {
+                // save mark to selected path
+                if let Some(idx) = self.list_state.selected() {
+                    if idx < self.entries.len() {
+                        self.marks.insert(c, self.entries[idx].path.clone());
+                    }
+                }
+                self.vim_buffer.clear();
+            }
+            c if self.vim_buffer == "'" => {
+                // jump to mark
+                if let Some(path) = self.marks.get(&c) {
+                    if path.is_dir() {
+                        self.current_path = path.clone();
+                    } else if let Some(parent) = path.parent() {
+                        self.current_path = parent.to_path_buf();
+                    }
+                    self.load_directory();
+                }
+                self.vim_buffer.clear();
+            }
+            _ => {
+                self.vim_buffer.clear();
+            }
+        }
     }
 }

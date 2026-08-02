@@ -61,6 +61,7 @@ fn run_app(
                     KeyCode::Char('r') | KeyCode::Delete => app.remove_project(),
                     KeyCode::Char('u') => app.mode = AppMode::ConfirmPush { force: false },
                     KeyCode::Char('U') => app.mode = AppMode::ConfirmPush { force: true },
+                    KeyCode::Char('A') => app.enter_input_mode(AppMode::InputAddSource),
                     KeyCode::Char('.') => {
                         if let Ok(cwd) = std::env::current_dir() {
                             app.add_source(cwd);
@@ -93,7 +94,7 @@ fn run_app(
                         }
                     }
                 },
-                AppMode::InputDate | AppMode::InputProfile => {
+                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath => {
                     match key.code {
                         KeyCode::Enter => app.submit_input(),
                         KeyCode::Esc => app.cancel_input(),
@@ -117,21 +118,37 @@ fn run_app(
                     } else {
                         match key.code {
                             KeyCode::Esc | KeyCode::Char('q') => app.cancel_input(),
-                            KeyCode::Char('j') | KeyCode::Down => app.file_explorer.next(),
-                            KeyCode::Char('k') | KeyCode::Up => app.file_explorer.previous(),
-                            KeyCode::Enter | KeyCode::Char('l') | KeyCode::Right => app.file_explorer.enter_directory(),
-                            KeyCode::Backspace | KeyCode::Char('h') | KeyCode::Left => app.file_explorer.go_up(),
+                            KeyCode::Char('j') | KeyCode::Down => { app.file_explorer.vim_buffer.clear(); app.file_explorer.next(); }
+                            KeyCode::Char('k') | KeyCode::Up => { app.file_explorer.vim_buffer.clear(); app.file_explorer.previous(); }
+                            KeyCode::Enter | KeyCode::Char('l') | KeyCode::Right => { app.file_explorer.vim_buffer.clear(); app.file_explorer.enter_directory(); }
+                            KeyCode::Backspace | KeyCode::Char('h') | KeyCode::Left => { app.file_explorer.vim_buffer.clear(); app.file_explorer.go_up(); }
                             KeyCode::Char('s') => {
                                 if let Some(path) = app.file_explorer.get_selected_path() {
                                     app.add_source(path);
+                                    app.flash_message = Some("Source added!".to_string());
                                     app.cancel_input(); // back to normal mode
                                 }
+                            },
+                            KeyCode::Char('S') => {
+                                let path = app.file_explorer.current_path.clone();
+                                app.add_source(path);
+                                app.flash_message = Some("Current explorer directory added!".to_string());
+                                app.cancel_input();
+                            },
+                            KeyCode::Char(':') => {
+                                app.enter_input_mode(AppMode::ExplorerJumpPath);
                             },
                             KeyCode::Char('/') => {
                                 app.file_explorer.is_searching = true;
                                 app.file_explorer.search_input.reset();
                             },
-                            _ => {}
+                            KeyCode::Char(c) if app.file_explorer.vim_buffer == "m" || app.file_explorer.vim_buffer == "'" => {
+                                app.file_explorer.handle_vim_key(c);
+                            },
+                            KeyCode::Char(c) if c.is_numeric() || matches!(c, 'm' | '\'' | 'g' | 'G') => {
+                                app.file_explorer.handle_vim_key(c);
+                            },
+                            _ => { app.file_explorer.vim_buffer.clear(); }
                         }
                     }
                 }

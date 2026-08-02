@@ -16,6 +16,8 @@ pub enum AppMode {
     InputProfile,
     FileExplorer,
     ConfirmPush { force: bool },
+    InputAddSource,
+    ExplorerJumpPath,
 }
 
 pub struct ProjectData {
@@ -297,6 +299,12 @@ impl App {
             AppMode::FileExplorer => {
                 self.file_explorer.load_directory();
             }
+            AppMode::InputAddSource => {
+                self.input = self.input.clone().with_value("".to_string());
+            }
+            AppMode::ExplorerJumpPath => {
+                self.input = self.input.clone().with_value(self.file_explorer.current_path.to_string_lossy().to_string());
+            }
             _ => {}
         }
     }
@@ -340,6 +348,28 @@ impl App {
                     self.projects.clear();
                     self.scan_sources();
                     self.reload_data();
+                }
+            }
+            AppMode::InputAddSource => {
+                let p = PathBuf::from(self.input.value().trim());
+                if p.exists() && p.is_dir() {
+                    self.add_source(p);
+                    self.flash_message = Some("Source path added!".to_string());
+                } else {
+                    self.flash_message = Some(format!("Invalid directory: {}", self.input.value()));
+                }
+            }
+            AppMode::ExplorerJumpPath => {
+                let p = PathBuf::from(self.input.value().trim());
+                if p.exists() && p.is_dir() {
+                    self.file_explorer.current_path = p;
+                    self.file_explorer.load_directory();
+                    self.mode = AppMode::FileExplorer;
+                    return; // Don't go back to normal
+                } else {
+                    self.flash_message = Some(format!("Invalid directory: {}", self.input.value()));
+                    self.mode = AppMode::FileExplorer;
+                    return;
                 }
             }
             _ => {}
