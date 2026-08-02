@@ -15,6 +15,7 @@ pub enum AppMode {
     InputDate,
     InputProfile,
     FileExplorer,
+    ConfirmPush { force: bool },
 }
 
 pub struct ProjectData {
@@ -41,6 +42,7 @@ pub struct App {
     pub author_list_state: ListState,
     pub config: AppConfig,
     pub current_profile: AppProfile,
+    pub flash_message: Option<String>,
 }
 
 impl App {
@@ -62,6 +64,7 @@ impl App {
             author_list_state: ListState::default(),
             config: AppConfig::load(),
             current_profile: AppProfile::default(),
+            flash_message: None,
         };
         app.current_profile = app.config.get_active_profile();
         app.sources = app.current_profile.sources.clone();
@@ -385,6 +388,35 @@ impl App {
         }
 
         Ok(())
+    }
+
+    pub fn push_project(&mut self, force: bool) {
+        if let Some(idx) = self.selected_project_idx {
+            if idx < self.projects.len() {
+                let path = &self.projects[idx].path;
+                let mut cmd = std::process::Command::new("git");
+                cmd.arg("push");
+                if force {
+                    cmd.arg("--force");
+                }
+                cmd.current_dir(path);
+                cmd.env("GIT_TERMINAL_PROMPT", "0");
+                
+                match cmd.output() {
+                    Ok(output) => {
+                        if output.status.success() {
+                            self.flash_message = Some("Push successful!".to_string());
+                        } else {
+                            let err = String::from_utf8_lossy(&output.stderr).to_string();
+                            self.flash_message = Some(format!("Push failed: {}", err));
+                        }
+                    }
+                    Err(e) => {
+                        self.flash_message = Some(format!("Failed to run git push: {}", e));
+                    }
+                }
+            }
+        }
     }
 }
 

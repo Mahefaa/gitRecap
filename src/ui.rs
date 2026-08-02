@@ -131,13 +131,41 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             render_commits_list(f, app, main_chunks[1]);
             
             let help_text = match app.mode {
-                AppMode::Normal => "q: Quit | P: Profile | a: Author | d: Date | p: Add Path | l/Enter: Commits | Space: Toggle | r: Remove | e: Export",
+                AppMode::Normal => "q: Quit | P: Profile | a: Author | d: Date | p: Add Path | l/Enter: Commits | Space: Toggle | r: Remove | e: Export | u: Push | U: Force Push",
                 AppMode::Details => "q: Quit | h/Esc: Back | j/k: Navigate Commits | e: Export",
                 _ => "",
             };
             let footer = Paragraph::new(help_text).block(Block::default().borders(Borders::ALL));
             f.render_widget(footer, chunks[2]);
         }
+        AppMode::ConfirmPush { force } => {
+            let main_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+                .split(chunks[1]);
+                
+            render_projects_list(f, app, main_chunks[0]);
+            render_commits_list(f, app, main_chunks[1]);
+            
+            let area = centered_rect(50, 20, f.area());
+            f.render_widget(ratatui::widgets::Clear, area);
+            let msg = if force {
+                "Are you sure you want to FORCE PUSH this project?\nThis action is destructive!\n\n(y/Enter: Yes, n/Esc: No)"
+            } else {
+                "Are you sure you want to PUSH this project?\n\n(y/Enter: Yes, n/Esc: No)"
+            };
+            let block = Block::default().title("Confirm Push").borders(Borders::ALL).border_style(Style::default().fg(if force { Color::Red } else { Color::Yellow }));
+            let p = Paragraph::new(msg).block(block).alignment(ratatui::layout::Alignment::Center);
+            f.render_widget(p, area);
+        }
+    }
+
+    if let Some(msg) = &app.flash_message {
+        let area = centered_rect(60, 20, f.area());
+        f.render_widget(ratatui::widgets::Clear, area);
+        let block = Block::default().title("Message (Press any key to dismiss)").borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan));
+        let p = Paragraph::new(msg.as_str()).block(block).alignment(ratatui::layout::Alignment::Center);
+        f.render_widget(p, area);
     }
 }
 
@@ -274,5 +302,25 @@ fn render_author_autocomplete(f: &mut Frame, app: &mut App, area: Rect) {
         .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
         .highlight_symbol(">> ");
         
-    f.render_stateful_widget(list, area, &mut app.author_list_state);
+        f.render_stateful_widget(list, area, &mut app.author_list_state);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }

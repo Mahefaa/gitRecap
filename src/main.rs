@@ -59,6 +59,8 @@ fn run_app(
                     KeyCode::Char('P') => app.enter_input_mode(AppMode::InputProfile),
                     KeyCode::Char(' ') => app.toggle_project(),
                     KeyCode::Char('r') | KeyCode::Delete => app.remove_project(),
+                    KeyCode::Char('u') => app.mode = AppMode::ConfirmPush { force: false },
+                    KeyCode::Char('U') => app.mode = AppMode::ConfirmPush { force: true },
                     KeyCode::Char('.') => {
                         if let Ok(cwd) = std::env::current_dir() {
                             app.add_source(cwd);
@@ -133,6 +135,26 @@ fn run_app(
                         }
                     }
                 }
+                AppMode::ConfirmPush { force } => {
+                    match key.code {
+                        KeyCode::Char('y') | KeyCode::Enter => {
+                            app.push_project(force);
+                            app.mode = AppMode::Normal;
+                            continue; // skip clearing flash_message below
+                        }
+                        KeyCode::Char('n') | KeyCode::Esc => {
+                            app.mode = AppMode::Normal;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            
+            match app.mode {
+                AppMode::Normal | AppMode::Details => {
+                    app.flash_message = None;
+                }
+                _ => {}
             }
         }
         if app.should_quit {
