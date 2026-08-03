@@ -48,9 +48,14 @@ fn run_app(
         terminal.draw(|f| ui::ui(f, app))?;
 
         if event::poll(std::time::Duration::from_millis(50))? {
-            match event::read()? {
+            loop {
+                match event::read()? {
                 Event::Key(key) => {
                     if key.kind != KeyEventKind::Press {
+                        continue;
+                    }
+                    if key.code == KeyCode::Char('c') && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
+                        app.should_quit = true;
                         continue;
                     }
                     match app.mode {
@@ -241,12 +246,16 @@ fn run_app(
                 _ => {}
             }
         }
-        Event::Mouse(mouse_event) => {
-            app.handle_mouse_event(mouse_event);
+                Event::Mouse(mouse_event) => {
+                    app.handle_mouse_event(mouse_event);
+                }
+                _ => {}
+                }
+                if app.should_quit || !event::poll(std::time::Duration::from_millis(0))? {
+                    break;
+                }
+            }
         }
-        _ => {}
-        }
-    }
     if app.should_quit {
         return Ok(());
     }

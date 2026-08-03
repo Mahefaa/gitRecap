@@ -244,6 +244,18 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         }
     }
 
+    if let AppMode::ConfirmQuit = app.mode {
+        let block = Block::default().borders(Borders::ALL).title("Confirm Quit").border_style(Style::default().fg(Color::Red));
+        let area = centered_rect(30, 20, chunks[1]);
+        f.render_widget(ratatui::widgets::Clear, area);
+        f.render_widget(
+            Paragraph::new("Are you sure you want to quit? [y/N]")
+                .alignment(ratatui::layout::Alignment::Center)
+                .block(block),
+            area,
+        );
+    }
+
     if let AppMode::Help = app.mode {
         let help_text = vec![
             Line::from(Span::styled("--- Global Navigation ---", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),

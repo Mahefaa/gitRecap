@@ -28,7 +28,7 @@ pub struct BranchGroup {
 
 pub fn find_git_repos(base_path: &Path) -> Vec<PathBuf> {
     let mut repos = Vec::new();
-    let mut it = WalkDir::new(base_path).into_iter();
+    let mut it = WalkDir::new(base_path).max_depth(4).into_iter();
     
     loop {
         let entry = match it.next() {
