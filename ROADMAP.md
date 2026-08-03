@@ -24,7 +24,7 @@ It ensures we do not lose track of the ambitious goals set for this project.
 ## 🌟 Game-Changing Features
 1. **Commit Diff Viewer (Split Screen)**
    - Pressing `Enter` on a commit opens a syntax-highlighted diff (via `git show`) in a bottom split pane.
-2. **Interactive Commit Editing**
+2. **Interactive Commit Editing** (Completed)
    - Press `E` on an unpushed commit to open `$EDITOR` and seamlessly run `git commit --amend` to rewrite history.
 3. **Global Fuzzy Finder** (Completed)
    - Press `/` to trigger a global fuzzy search window (similar to `fzf`) across all projects, branches, and commits simultaneously.

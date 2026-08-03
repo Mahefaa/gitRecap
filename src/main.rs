@@ -143,6 +143,35 @@ fn run_app(
                             app.enter_input_mode(AppMode::FuzzyFinder);
                             app.execute_fuzzy_search();
                         }
+                        KeyCode::Char('E') => {
+                            if let Some(idx) = app.commit_list_state.selected() {
+                                if idx < app.commit_list_map.len() {
+                                    let (proj_idx, _, _) = app.commit_list_map[idx];
+                                    if proj_idx < app.projects.len() {
+                                        let proj_path = app.projects[proj_idx].path.clone();
+                                        
+                                        // Suspend UI
+                                        let _ = crossterm::terminal::disable_raw_mode();
+                                        let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen, crossterm::event::DisableMouseCapture);
+                                        
+                                        // Run interactive command
+                                        let _ = std::process::Command::new("git")
+                                            .arg("commit")
+                                            .arg("--amend")
+                                            .current_dir(&proj_path)
+                                            .status();
+                                            
+                                        // Restore UI
+                                        let _ = crossterm::terminal::enable_raw_mode();
+                                        let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen, crossterm::event::EnableMouseCapture);
+                                        let _ = terminal.clear();
+                                        
+                                        app.reload_data();
+                                        app.flash_message = Some("Amended commit!".to_string());
+                                    }
+                                }
+                            }
+                        }
                         KeyCode::Char(':') => app.enter_input_mode(AppMode::Command),
                         KeyCode::Char('G') => {
                             let last = app.commit_list_map.len().saturating_sub(1);

@@ -52,6 +52,7 @@ Profiles allow you to maintain entirely separate workspaces (e.g., "work" vs. "p
 ## 📤 Git Integration
 - `u`: Run `git push` on the currently selected repository.
 - `U`: Run `git push --force` on the currently selected repository (requires confirmation).
+- `E`: **Interactive Rewrite**. Press `E` while hovering over any unpushed commit to suspend the app, open your terminal `$EDITOR`, and seamlessly run `git commit --amend`. The app will automatically redraw and reload your updated Git tree when you're done!
 - **Unpushed Commits Marker:** Any commit labeled with a red `*` next to it exists on your local machine but has **not yet been pushed** to your remote origin. This makes it incredibly easy to see which repositories need syncing!
 
 ---
