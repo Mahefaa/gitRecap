@@ -284,11 +284,22 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         let block = Block::default().borders(Borders::ALL).title("Confirm Quit").border_style(Style::default().fg(Color::Red));
         let area = centered_rect(30, 20, f.area());
         f.render_widget(ratatui::widgets::Clear, area);
+        
+        let inner_area = block.inner(area);
+        f.render_widget(block, area);
+        
+        let pad_top = inner_area.height.saturating_sub(1) / 2;
+        let text_area = ratatui::layout::Rect {
+            x: inner_area.x,
+            y: inner_area.y + pad_top,
+            width: inner_area.width,
+            height: 1,
+        };
+        
         f.render_widget(
             Paragraph::new("Are you sure you want to quit? [y/N]")
-                .alignment(ratatui::layout::Alignment::Center)
-                .block(block),
-            area,
+                .alignment(ratatui::layout::Alignment::Center),
+            text_area,
         );
     }
 
@@ -345,8 +356,20 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         let area = centered_rect(60, 20, f.area());
         f.render_widget(ratatui::widgets::Clear, area);
         let block = Block::default().title("Message (Press any key to dismiss)").borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan));
-        let p = Paragraph::new(msg.as_str()).block(block).alignment(ratatui::layout::Alignment::Center);
-        f.render_widget(p, area);
+        let inner_area = block.inner(area);
+        f.render_widget(block, area);
+        
+        let text_height = msg.lines().count() as u16;
+        let pad_top = inner_area.height.saturating_sub(text_height) / 2;
+        let text_area = ratatui::layout::Rect {
+            x: inner_area.x,
+            y: inner_area.y + pad_top,
+            width: inner_area.width,
+            height: text_height,
+        };
+        
+        let p = Paragraph::new(msg.as_str()).alignment(ratatui::layout::Alignment::Center);
+        f.render_widget(p, text_area);
     }
 }
 

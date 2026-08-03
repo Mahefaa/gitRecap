@@ -69,6 +69,10 @@ fn run_app(
                         app.should_quit = true;
                         continue;
                     }
+                    if app.flash_message.is_some() {
+                        app.flash_message = None;
+                        continue;
+                    }
                     match app.mode {
                 AppMode::Normal => match key.code {
                     KeyCode::Right if key.modifiers.contains(crossterm::event::KeyModifiers::ALT) => {
