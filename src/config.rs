@@ -8,7 +8,22 @@ pub struct AppProfile {
     pub sources: Vec<PathBuf>,
     pub disabled_projects: Vec<PathBuf>,
     pub removed_projects: Vec<PathBuf>,
+    
+    #[serde(default = "default_author")]
+    pub author_filter: String,
+    
+    #[serde(default)]
+    pub branch_filter: String,
+    
+    #[serde(default = "default_date_filter")]
+    pub date_filter: String,
+    
+    #[serde(default)]
+    pub hide_zero_commits: bool,
 }
+
+fn default_author() -> String { "Any".to_string() }
+fn default_date_filter() -> String { "today".to_string() }
 
 impl Default for AppProfile {
     fn default() -> Self {
@@ -17,6 +32,10 @@ impl Default for AppProfile {
             sources: vec![PathBuf::from(".")],
             disabled_projects: Vec::new(),
             removed_projects: Vec::new(),
+            author_filter: default_author(),
+            branch_filter: String::new(),
+            date_filter: default_date_filter(),
+            hide_zero_commits: false,
         }
     }
 }
@@ -76,9 +95,7 @@ impl AppConfig {
         if !self.profiles.iter().any(|p| p.name == name) {
             let new_profile = AppProfile {
                 name: name.to_string(),
-                sources: Vec::new(),
-                disabled_projects: Vec::new(),
-                removed_projects: Vec::new(),
+                ..Default::default()
             };
             self.profiles.push(new_profile);
         }

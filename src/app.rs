@@ -104,6 +104,14 @@ impl App {
         app.current_profile = app.config.get_active_profile();
         app.sources = app.current_profile.sources.clone();
         
+        app.author_filter = app.current_profile.author_filter.clone();
+        app.branch_filter = app.current_profile.branch_filter.clone();
+        app.hide_zero_commits = app.current_profile.hide_zero_commits;
+        if let Some((start, end)) = crate::app::parse_date_input(&app.current_profile.date_filter) {
+            app.date_start_filter = start;
+            app.date_end_filter = end;
+        }
+        
         app.scan_sources();
         app
     }
@@ -499,8 +507,7 @@ impl App {
                 self.author_list_state.select(Some(0));
             },
             AppMode::InputDate => {
-                let display = format!("{}..{}", self.date_start_filter.format("%Y-%m-%d"), self.date_end_filter.format("%Y-%m-%d"));
-                self.input = self.input.clone().with_value(display);
+                self.input = self.input.clone().with_value(self.current_profile.date_filter.clone());
             },
             AppMode::InputBranch => {
                 self.input = self.input.clone().with_value(self.branch_filter.clone());
@@ -546,17 +553,23 @@ impl App {
                 } else {
                     self.author_filter = if self.input.value().is_empty() { "Any".to_string() } else { self.input.value().to_string() };
                 }
+                self.current_profile.author_filter = self.author_filter.clone();
+                self.config.update_active_profile(self.current_profile.clone());
                 self.reload_data();
             }
             AppMode::InputDate => {
                 if let Some((start, end)) = parse_date_input(self.input.value()) {
                     self.date_start_filter = start;
                     self.date_end_filter = end;
+                    self.current_profile.date_filter = self.input.value().to_string();
+                    self.config.update_active_profile(self.current_profile.clone());
                     self.reload_data();
                 }
             }
             AppMode::InputBranch => {
                 self.branch_filter = self.input.value().to_string();
+                self.current_profile.branch_filter = self.branch_filter.clone();
+                self.config.update_active_profile(self.current_profile.clone());
                 self.reload_data();
             }
             AppMode::InputCommitSearch => {
@@ -573,6 +586,15 @@ impl App {
                 if !name.is_empty() {
                     self.current_profile = self.config.switch_profile(&name);
                     self.sources = self.current_profile.sources.clone();
+                    
+                    self.author_filter = self.current_profile.author_filter.clone();
+                    self.branch_filter = self.current_profile.branch_filter.clone();
+                    self.hide_zero_commits = self.current_profile.hide_zero_commits;
+                    if let Some((start, end)) = crate::app::parse_date_input(&self.current_profile.date_filter) {
+                        self.date_start_filter = start;
+                        self.date_end_filter = end;
+                    }
+                    
                     self.projects.clear();
                     self.scan_sources();
                     self.reload_data();
