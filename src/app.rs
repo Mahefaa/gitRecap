@@ -781,6 +781,22 @@ fn parse_date_input(input: &str) -> Option<(chrono::DateTime<Local>, chrono::Dat
             return Some((day_range(now.date_naive()).0, now));
         } else if s == "endofday" {
             return Some((now, day_range(now.date_naive()).1));
+        } else if s.ends_with("d") || s.ends_with("days") || s.ends_with("day") {
+            let num_str = s.trim_end_matches("days").trim_end_matches("day").trim_end_matches('d').trim();
+            if let Ok(n) = num_str.parse::<i64>() {
+                let start_date = now.date_naive() - chrono::Duration::days(n);
+                let start = start_date.and_hms_opt(0, 0, 0).unwrap().and_local_timezone(Local).unwrap();
+                let end = now.date_naive().and_hms_opt(23, 59, 59).unwrap().and_local_timezone(Local).unwrap();
+                return Some((start, end));
+            }
+        } else if s.ends_with("w") || s.ends_with("weeks") || s.ends_with("week") {
+            let num_str = s.trim_end_matches("weeks").trim_end_matches("week").trim_end_matches('w').trim();
+            if let Ok(n) = num_str.parse::<i64>() {
+                let start_date = now.date_naive() - chrono::Duration::days(n * 7);
+                let start = start_date.and_hms_opt(0, 0, 0).unwrap().and_local_timezone(Local).unwrap();
+                let end = now.date_naive().and_hms_opt(23, 59, 59).unwrap().and_local_timezone(Local).unwrap();
+                return Some((start, end));
+            }
         } else if s == "startofmonth" {
             let d = NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap();
             return Some((day_range(d).0, now));

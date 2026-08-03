@@ -268,8 +268,41 @@ fn run_app(
                 }
             }
         }
-    if app.should_quit {
-        return Ok(());
+        if app.should_quit {
+            return Ok(());
+        }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+    use std::path::PathBuf;
+    use app::LoadingResult;
+
+    #[test]
+    fn test_scan_performance() {
+        let mut app = app::App::new();
+        app.sources = vec![PathBuf::from("/home/mahefa/git")];
+        println!("Starting parallel Rayon scan on /home/mahefa/git...");
+        let start = Instant::now();
+        app.scan_sources();
+        
+        if let Some(rx) = &app.loading_rx {
+            let mut count = 0;
+            loop {
+                if let Ok(res) = rx.recv() {
+                    match res {
+                        LoadingResult::ProjectScanned(_) => count += 1,
+                        LoadingResult::ScanComplete(_) => break,
+                        _ => {}
+                    }
+                } else {
+                    break;
+                }
+            }
+            println!("Scan complete! Parsed {} repositories in {:?}", count, start.elapsed());
+        }
+    }
 }

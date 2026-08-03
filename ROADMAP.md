@@ -6,9 +6,9 @@ It ensures we do not lose track of the ambitious goals set for this project.
 ## ⚡ Performance First (In Progress)
 - [x] Limit recursive directory scanning depth to prevent I/O blocking.
 - [x] Batch process terminal events to eliminate UI lag/stutter on rapid key presses.
-- [ ] **Multi-threading (Rayon):** Parallelize git parsing (`git2` `revwalk`) across all CPU cores when scanning multiple repositories.
-- [ ] Optimize `revwalk` to strictly halt traversal once it passes the time filter threshold.
-- [ ] Only render the visible viewport (`ratatui` does this generally, but ensure we don't build 10,000 ListItems if only 50 are visible).
+- [x] **Multi-threading (Rayon):** Parallelize git parsing (`git2` `revwalk`) across all CPU cores when scanning multiple repositories.
+- [x] Optimize `revwalk` to strictly halt traversal once it passes the time filter threshold.
+- [x] Only render the visible viewport (`ratatui` does this generally, but ensure we don't build 10,000 ListItems if only 50 are visible).
 
 ## 🖥️ UI / UX Refactor & Graphical Overhaul
 - [ ] Restructure the UI components for clarity and lightweight performance on low-spec PCs.
