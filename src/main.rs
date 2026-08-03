@@ -63,7 +63,9 @@ fn run_app(
                     KeyCode::Char('p') => app.enter_input_mode(AppMode::FileExplorer),
                     KeyCode::Char('P') => app.enter_input_mode(AppMode::InputProfile),
                     KeyCode::Char(' ') => app.toggle_project(),
+                    KeyCode::Char('s') => app.toggle_all_projects(),
                     KeyCode::Char('c') => app.toggle_expand(),
+                    KeyCode::Char('b') => app.enter_input_mode(AppMode::InputBranch),
                     KeyCode::Char('R') => app.reload_data(),
                     KeyCode::Char('r') | KeyCode::Delete => app.remove_project(),
                     KeyCode::Char('u') => app.mode = AppMode::ConfirmPush { force: false },
@@ -101,7 +103,7 @@ fn run_app(
                         }
                     }
                 },
-                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath => {
+                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch => {
                     match key.code {
                         KeyCode::Enter => app.submit_input(),
                         KeyCode::Esc => app.cancel_input(),

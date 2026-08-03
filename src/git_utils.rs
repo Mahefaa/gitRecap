@@ -48,6 +48,7 @@ pub fn find_git_repos(base_path: &Path) -> Vec<PathBuf> {
 pub fn get_commits(
     repo_path: &Path,
     author_name: &str,
+    branch_filter: &str,
     start_date: chrono::DateTime<chrono::Local>,
     end_date: chrono::DateTime<chrono::Local>,
 ) -> Result<Vec<BranchCommits>, git2::Error> {
@@ -80,6 +81,14 @@ pub fn get_commits(
         for branch_res in local_branches.filter_map(|b| b.ok()) {
             let (branch, _) = branch_res;
             let branch_name = branch.name().unwrap_or(Some("unknown")).unwrap_or("unknown").to_string();
+            
+            let filter_branches: Vec<String> = branch_filter.split(',').map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect();
+            if !filter_branches.is_empty() {
+                let matches = filter_branches.iter().any(|fb| branch_name.to_lowercase().contains(fb));
+                if !matches {
+                    continue;
+                }
+            }
             
             let mut commits = Vec::new();
             if let Some(target) = branch.get().target()

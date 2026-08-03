@@ -98,6 +98,25 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 chunks[2].y + 1,
             ));
         },
+        AppMode::InputBranch => {
+            let main_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+                .split(chunks[1]);
+                
+            render_projects_list(f, app, main_chunks[0]);
+            render_commits_list(f, app, main_chunks[1]);
+            
+            let input_widget = Paragraph::new(app.input.value())
+                .style(Style::default().fg(Color::Yellow))
+                .block(Block::default().borders(Borders::ALL).title("Enter Branches separated by commas (e.g. main,dev) (Esc cancel, Enter submit)"));
+            f.render_widget(input_widget, chunks[2]);
+            #[allow(clippy::cast_possible_truncation)]
+            f.set_cursor_position((
+                chunks[2].x + 1 + app.input.visual_cursor() as u16,
+                chunks[2].y + 1,
+            ));
+        },
         AppMode::InputProfile => {
             let main_chunks = Layout::default()
                 .direction(Direction::Horizontal)
@@ -152,7 +171,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             render_commits_list(f, app, main_chunks[1]);
             
             let help_text = match app.mode {
-                AppMode::Normal => "q: Quit | P: Profile | a: Author | d: Date | p: Explorer | A: Add Path | l/Enter: Commits | Space: Toggle | c: Collapse | r: Rm | R: Refresh | e: Export | u: Push",
+                AppMode::Normal => "q: Quit | P: Profile | a: Author | d: Date | b: Branch | p: Explorer | A: Add Path | l/Enter: Commits | Space: Toggle | s: Toggle All | c: Collapse | r: Rm | R: Refresh | e: Export | u: Push",
                 AppMode::Details => "q: Quit | h/Esc: Back | j/k: Navigate Commits | e: Export",
                 _ => "",
             };

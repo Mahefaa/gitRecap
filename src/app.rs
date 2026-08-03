@@ -18,6 +18,7 @@ pub enum AppMode {
     ConfirmPush { force: bool },
     InputAddSource,
     ExplorerJumpPath,
+    InputBranch,
 }
 
 pub enum LoadingResult {
@@ -39,6 +40,7 @@ pub struct App {
     pub author_filter: String,
     pub date_start_filter: chrono::DateTime<Local>,
     pub date_end_filter: chrono::DateTime<Local>,
+    pub branch_filter: String,
     pub sources: Vec<PathBuf>,
     pub projects: Vec<ProjectData>,
     pub project_list_state: ListState,
@@ -63,6 +65,7 @@ impl App {
             author_filter: "Any".to_string(),
             date_start_filter: Local::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_local_timezone(Local).unwrap(),
             date_end_filter: Local::now().date_naive().and_hms_opt(23, 59, 59).unwrap().and_local_timezone(Local).unwrap(),
+            branch_filter: String::new(),
             sources: vec![PathBuf::from(".")],
             projects: Vec::new(),
             project_list_state: ListState::default(),
@@ -134,7 +137,6 @@ impl App {
         if updated {
             self.config.update_active_profile(self.current_profile.clone());
             self.scan_sources();
-            self.reload_data();
         }
     }
 
@@ -143,6 +145,7 @@ impl App {
         let disabled_projects = self.current_profile.disabled_projects.clone();
         let removed_projects = self.current_profile.removed_projects.clone();
         let author_filter = self.author_filter.clone();
+        let branch_filter = self.branch_filter.clone();
         let start_date = self.date_start_filter;
         let end_date = self.date_end_filter;
         let existing_paths: std::collections::HashSet<_> = self.projects.iter().map(|p| p.path.clone()).collect();
@@ -166,7 +169,7 @@ impl App {
                         
                         let mut branches = Vec::new();
                         if enabled {
-                            if let Ok(mut b) = crate::git_utils::get_commits(&repo_path, &author_filter, start_date, end_date) {
+                            if let Ok(mut b) = crate::git_utils::get_commits(&repo_path, &author_filter, &branch_filter, start_date, end_date) {
                                 for br in &mut b {
                                     br.commits.sort_by_key(|c| std::cmp::Reverse(c.date));
                                 }
@@ -198,6 +201,7 @@ impl App {
     pub fn reload_data(&mut self) {
         let mut projects = self.projects.clone();
         let author_filter = self.author_filter.clone();
+        let branch_filter = self.branch_filter.clone();
         let start_date = self.date_start_filter;
         let end_date = self.date_end_filter;
 
@@ -209,7 +213,7 @@ impl App {
             for proj in &mut projects {
                 proj.branches.clear();
                 if proj.enabled {
-                    if let Ok(mut branches) = crate::git_utils::get_commits(&proj.path, &author_filter, start_date, end_date) {
+                    if let Ok(mut branches) = crate::git_utils::get_commits(&proj.path, &author_filter, &branch_filter, start_date, end_date) {
                         for b in &mut branches {
                             b.commits.sort_by_key(|c| std::cmp::Reverse(c.date));
                         }
@@ -247,6 +251,25 @@ impl App {
                 self.projects[idx].is_expanded = !self.projects[idx].is_expanded;
             }
         }
+    }
+
+    pub fn toggle_all_projects(&mut self) {
+        if self.projects.is_empty() { return; }
+        let all_enabled = self.projects.iter().all(|p| p.enabled);
+        let new_state = !all_enabled;
+        for proj in &mut self.projects {
+            proj.enabled = new_state;
+            let path = proj.path.clone();
+            if new_state {
+                self.current_profile.disabled_projects.retain(|p| p != &path);
+            } else {
+                if !self.current_profile.disabled_projects.contains(&path) {
+                    self.current_profile.disabled_projects.push(path);
+                }
+            }
+        }
+        self.config.update_active_profile(self.current_profile.clone());
+        self.reload_data();
     }
 
     pub fn remove_project(&mut self) {
@@ -408,6 +431,9 @@ impl App {
                 let display = format!("{}..{}", self.date_start_filter.format("%Y-%m-%d"), self.date_end_filter.format("%Y-%m-%d"));
                 self.input = self.input.clone().with_value(display);
             },
+            AppMode::InputBranch => {
+                self.input = self.input.clone().with_value(self.branch_filter.clone());
+            },
             AppMode::InputProfile => {
                 self.input = self.input.clone().with_value(self.current_profile.name.clone());
             },
@@ -454,6 +480,10 @@ impl App {
                     self.date_end_filter = end;
                     self.reload_data();
                 }
+            }
+            AppMode::InputBranch => {
+                self.branch_filter = self.input.value().to_string();
+                self.reload_data();
             }
             AppMode::InputProfile => {
                 let name = self.input.value().to_string();
