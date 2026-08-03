@@ -107,6 +107,9 @@ fn run_app(
                     KeyCode::Char('v') => {
                         app.mode = AppMode::Dashboard;
                     }
+                    KeyCode::Char('C') => {
+                        app.mode = AppMode::Chat;
+                    }
                     KeyCode::Char(':') => app.enter_input_mode(AppMode::Command),
                     KeyCode::Char('G') => {
                         let last = app.projects.len().saturating_sub(1);
@@ -238,6 +241,18 @@ fn run_app(
                 AppMode::Dashboard => match key.code {
                     KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('v') => app.mode = AppMode::Normal,
                     _ => {}
+                },
+                AppMode::Chat => match key.code {
+                    KeyCode::Esc => app.mode = AppMode::Normal,
+                    KeyCode::Enter => app.submit_chat_message(),
+                    KeyCode::Up => app.chat_scroll = app.chat_scroll.saturating_sub(1),
+                    KeyCode::Down => app.chat_scroll = app.chat_scroll.saturating_add(1),
+                    KeyCode::PageUp => app.chat_scroll = app.chat_scroll.saturating_sub(10),
+                    KeyCode::PageDown => app.chat_scroll = app.chat_scroll.saturating_add(10),
+                    _ => {
+                        use tui_input::backend::crossterm::EventHandler;
+                        app.chat_input.handle_event(&crossterm::event::Event::Key(key));
+                    }
                 },
                 AppMode::Help => {
                     match key.code {

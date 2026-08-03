@@ -25,6 +25,7 @@ pub enum AppMode {
     ConfirmQuit,
     Help,
     Dashboard,
+    Chat,
 }
 
 pub enum LoadingResult {
@@ -32,6 +33,7 @@ pub enum LoadingResult {
     ScanComplete(Vec<String>),
     ReloadComplete(Vec<ProjectData>),
     FetchComplete,
+    ChatResponse(String),
 }
 
 #[derive(Clone)]
@@ -83,6 +85,10 @@ pub struct App {
     pub hide_zero_commits: bool,
     pub diff_content: Option<Vec<u8>>,
     pub diff_scroll: u16,
+    pub chat_input: Input,
+    pub chat_history: Vec<(String, String)>,
+    pub chat_is_loading: bool,
+    pub chat_scroll: u16,
 }
 
 impl App {
@@ -118,6 +124,10 @@ impl App {
             hide_zero_commits: false,
             diff_content: None,
             diff_scroll: 0,
+            chat_input: Input::default(),
+            chat_history: Vec::new(),
+            chat_is_loading: false,
+            chat_scroll: 0,
         };
         app.current_profile = app.config.get_active_profile();
         app.sources = app.current_profile.sources.clone();
@@ -165,6 +175,16 @@ impl App {
                         self.loading_rx = None;
                         self.flash_message = Some("Fetch complete!".to_string());
                         self.reload_data(); // reload after fetching
+                        break;
+                    }
+                    LoadingResult::ChatResponse(response) => {
+                        if let Some(last) = self.chat_history.last_mut() {
+                            last.1 = response;
+                        } else {
+                            self.chat_history.push((String::new(), response));
+                        }
+                        self.chat_is_loading = false;
+                        self.loading_rx = None;
                         break;
                     }
                 }
@@ -954,6 +974,114 @@ impl App {
         } else {
             self.fuzzy_list_state.select(None);
         }
+    }
+
+    pub fn submit_chat_message(&mut self) {
+        let msg = self.chat_input.value().to_string();
+        if msg.trim().is_empty() { return; }
+        
+        self.chat_history.push((msg.clone(), String::new()));
+        self.chat_input.reset();
+        self.chat_is_loading = true;
+        self.chat_scroll = 0;
+        
+        let mut context = String::new();
+        for proj in &self.projects {
+            if !proj.enabled { continue; }
+            context.push_str(&format!("Repo: {}\n", proj.name));
+            for d in &proj.dates {
+                for b in &d.branches {
+                    for c in &b.commits {
+                        context.push_str(&format!("- [{}] {}\n", c.author, c.message));
+                    }
+                }
+            }
+        }
+        
+        let config = self.config.ai.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.loading_rx = Some(rx);
+        
+        std::thread::spawn(move || {
+            let client = reqwest::blocking::Client::new();
+            let provider = config.provider.as_str();
+            
+            let response_text = match provider {
+                "gemini" => {
+                    let api_key = config.api_key.clone().unwrap_or_else(|| std::env::var("GEMINI_API_KEY").unwrap_or_default());
+                    let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", config.model, api_key);
+                    let body = serde_json::json!({
+                        "contents": [{
+                            "parts": [
+                                {"text": format!("Context (Git History):\n{}\n\nUser Question:\n{}", context, msg)}
+                            ]
+                        }]
+                    });
+                    
+                    match client.post(&url).json(&body).send() {
+                        Ok(res) => {
+                            if let Ok(json) = res.json::<serde_json::Value>() {
+                                json["candidates"][0]["content"]["parts"][0]["text"].as_str().unwrap_or("Failed to parse Gemini response").to_string()
+                            } else {
+                                "Failed to parse Gemini JSON".to_string()
+                            }
+                        },
+                        Err(e) => format!("Network Error: {}", e),
+                    }
+                },
+                "claude" => {
+                    let api_key = config.api_key.clone().unwrap_or_else(|| std::env::var("ANTHROPIC_API_KEY").unwrap_or_default());
+                    let body = serde_json::json!({
+                        "model": config.model,
+                        "max_tokens": 2048,
+                        "messages": [
+                            {"role": "user", "content": format!("Context:\n{}\n\nUser Question:\n{}", context, msg)}
+                        ]
+                    });
+                    match client.post("https://api.anthropic.com/v1/messages")
+                        .header("x-api-key", api_key)
+                        .header("anthropic-version", "2023-06-01")
+                        .json(&body)
+                        .send() {
+                            Ok(res) => {
+                                if let Ok(json) = res.json::<serde_json::Value>() {
+                                    json["content"][0]["text"].as_str().unwrap_or("Failed to parse Claude response").to_string()
+                                } else {
+                                    "Failed to parse Claude JSON".to_string()
+                                }
+                            },
+                            Err(e) => format!("Network Error: {}", e),
+                        }
+                },
+                "local" | "openai" => {
+                    let url = config.endpoint.clone().unwrap_or_else(|| "http://localhost:11434/v1/chat/completions".to_string());
+                    let mut req = client.post(&url);
+                    if let Some(key) = config.api_key.clone() {
+                        req = req.bearer_auth(key);
+                    }
+                    
+                    let body = serde_json::json!({
+                        "model": config.model,
+                        "messages": [
+                            {"role": "user", "content": format!("Context:\n{}\n\nUser Question:\n{}", context, msg)}
+                        ]
+                    });
+                    match req.json(&body).send() {
+                        Ok(res) => {
+                            if let Ok(json) = res.json::<serde_json::Value>() {
+                                json["choices"][0]["message"]["content"].as_str().unwrap_or("Failed to parse OpenAI/Local response").to_string()
+                            } else {
+                                "Failed to parse OpenAI/Local JSON".to_string()
+                            }
+                        },
+                        Err(e) => format!("Network Error: {}", e),
+                    }
+                },
+                _ => format!("Unknown provider: {}", provider),
+            };
+            
+            let _ = tx.send(LoadingResult::ChatResponse(response_text));
+        });
     }
 }
 

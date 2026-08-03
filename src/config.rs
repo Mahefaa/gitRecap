@@ -40,10 +40,42 @@ impl Default for AppProfile {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct AIConfig {
+    #[serde(default = "default_provider")]
+    pub provider: String,
+    
+    #[serde(default)]
+    pub api_key: Option<String>,
+    
+    #[serde(default = "default_model")]
+    pub model: String,
+    
+    #[serde(default)]
+    pub endpoint: Option<String>,
+}
+
+fn default_provider() -> String { "gemini".to_string() }
+fn default_model() -> String { "gemini-1.5-flash".to_string() }
+
+impl Default for AIConfig {
+    fn default() -> Self {
+        Self {
+            provider: default_provider(),
+            api_key: None,
+            model: default_model(),
+            endpoint: None,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AppConfig {
     pub active_profile: String,
     pub profiles: Vec<AppProfile>,
+    
+    #[serde(default)]
+    pub ai: AIConfig,
 }
 
 impl AppConfig {
@@ -67,6 +99,7 @@ impl AppConfig {
         Self {
             active_profile: "default".to_string(),
             profiles: vec![AppProfile::default()],
+            ai: AIConfig::default(),
         }
     }
 

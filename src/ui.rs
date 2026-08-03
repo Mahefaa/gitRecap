@@ -331,6 +331,49 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 
             f.render_widget(barchart, dashboard_layout[1]);
         }
+        AppMode::Chat => {
+            let chat_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(0), Constraint::Length(3)].as_ref())
+                .split(chunks[1]);
+                
+            let mut chat_lines = Vec::new();
+            for (q, a) in &app.chat_history {
+                chat_lines.push(Line::from(Span::styled(format!("You: {}", q), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
+                if !a.is_empty() {
+                    chat_lines.push(Line::from(Span::styled("AI:", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))));
+                    let mut is_code = false;
+                    for line in a.lines() {
+                        if line.starts_with("```") { 
+                            is_code = !is_code; 
+                            continue; 
+                        }
+                        if is_code {
+                            chat_lines.push(Line::from(Span::styled(line.to_string(), Style::default().fg(Color::Yellow))));
+                        } else {
+                            chat_lines.push(Line::from(Span::styled(line.to_string(), Style::default().fg(Color::White))));
+                        }
+                    }
+                } else if app.chat_is_loading {
+                    chat_lines.push(Line::from(Span::styled("AI is thinking...", Style::default().fg(Color::DarkGray).add_modifier(Modifier::RAPID_BLINK))));
+                }
+                chat_lines.push(Line::from(""));
+            }
+            
+            let chat_title = format!("Chat with Git History ({} - {})", app.config.ai.provider, app.config.ai.model);
+            let chat_block = Block::default().title(chat_title.as_str()).borders(Borders::ALL).border_style(Style::default().fg(Color::Magenta));
+            let history_p = Paragraph::new(chat_lines).block(chat_block).scroll((app.chat_scroll, 0)).wrap(ratatui::widgets::Wrap { trim: false });
+            f.render_widget(history_p, chat_chunks[0]);
+            
+            let input_block = Block::default().title("Ask a question (Enter to submit, Esc to close, Up/Down/PgUp/PgDn to scroll)").borders(Borders::ALL).border_style(Style::default().fg(Color::Green));
+            let input_p = Paragraph::new(app.chat_input.value()).block(input_block);
+            f.render_widget(input_p, chat_chunks[1]);
+            
+            f.set_cursor(
+                chat_chunks[1].x + app.chat_input.visual_cursor() as u16 + 1,
+                chat_chunks[1].y + 1,
+            );
+        }
     }
 
     if let AppMode::ConfirmQuit = app.mode {
