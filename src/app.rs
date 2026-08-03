@@ -20,7 +20,7 @@ pub enum AppMode {
     ExplorerJumpPath,
     InputBranch,
     CommitsView,
-    InputCommitSearch,
+    FuzzyFinder,
     Command,
     ConfirmQuit,
     Help,
@@ -42,12 +42,24 @@ pub struct ProjectData {
     pub is_expanded: bool,
 }
 
+#[derive(Clone)]
+pub struct FuzzyResult {
+    pub project_name: String,
+    pub branch_name: String,
+    pub commit_id: String,
+    pub commit_message: String,
+    pub commit_author: String,
+    pub commit_date: String,
+    pub score: i64,
+}
+
 pub struct App {
     pub author_filter: String,
     pub date_start_filter: chrono::DateTime<Local>,
     pub date_end_filter: chrono::DateTime<Local>,
     pub branch_filter: String,
-    pub commit_search: String,
+    pub fuzzy_results: Vec<FuzzyResult>,
+    pub fuzzy_list_state: ListState,
     pub projects_area: Option<Rect>,
     pub commits_area: Option<Rect>,
     pub commit_list_map: Vec<(usize, Option<usize>, Option<usize>)>,
@@ -79,7 +91,8 @@ impl App {
             date_start_filter: today_start,
             date_end_filter: today_end,
             branch_filter: String::new(),
-            commit_search: String::new(),
+            fuzzy_results: Vec::new(),
+            fuzzy_list_state: ListState::default(),
             projects_area: None,
             commits_area: None,
             commit_list_map: Vec::new(),
@@ -578,7 +591,7 @@ impl App {
 
     pub fn enter_input_mode(&mut self, mode: AppMode) {
         match mode {
-            AppMode::InputAuthor | AppMode::InputDate | AppMode::InputProfile | AppMode::FileExplorer | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::InputCommitSearch | AppMode::Command => {
+            AppMode::InputAuthor | AppMode::InputDate | AppMode::InputProfile | AppMode::FileExplorer | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::FuzzyFinder | AppMode::Command => {
                 self.input.reset();
                 self.mode = mode;
             }
@@ -595,8 +608,10 @@ impl App {
             AppMode::InputBranch => {
                 self.input = self.input.clone().with_value(self.branch_filter.clone());
             },
-            AppMode::InputCommitSearch => {
-                self.input = self.input.clone().with_value(self.commit_search.clone());
+            AppMode::FuzzyFinder => {
+                self.input = self.input.clone().with_value(String::new());
+                self.fuzzy_results.clear();
+                self.fuzzy_list_state.select(None);
             },
             AppMode::InputProfile => {
                 self.input = self.input.clone().with_value(self.current_profile.name.clone());
@@ -655,10 +670,7 @@ impl App {
                 self.config.update_active_profile(self.current_profile.clone());
                 self.reload_data();
             }
-            AppMode::InputCommitSearch => {
-                self.commit_search = self.input.value().to_string();
-                self.mode = AppMode::Normal;
-            }
+
             AppMode::Command => {
                 let cmd = self.input.value().to_string();
                 self.execute_command(&cmd);
@@ -714,7 +726,7 @@ impl App {
 
     pub fn cancel_input(&mut self) {
         match self.mode {
-            AppMode::InputAuthor | AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::InputCommitSearch | AppMode::Command => {
+            AppMode::InputAuthor | AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::Command => {
                 self.mode = AppMode::Normal;
             }
             _ => { self.mode = AppMode::Normal; }
@@ -837,6 +849,55 @@ impl App {
                     }
                 }
             }
+        }
+    }
+
+    pub fn execute_fuzzy_search(&mut self) {
+        use fuzzy_matcher::FuzzyMatcher;
+        use fuzzy_matcher::skim::SkimMatcherV2;
+        
+        let matcher = SkimMatcherV2::default();
+        let query = self.input.value().to_string();
+        
+        self.fuzzy_results.clear();
+        
+        if query.is_empty() {
+            self.fuzzy_list_state.select(None);
+            return;
+        }
+        
+        for proj in &self.projects {
+            if !proj.enabled { continue; }
+            for date_group in &proj.dates {
+                for branch in &date_group.branches {
+                    for commit in &branch.commits {
+                        let search_text = format!("{} {} {}", commit.id, commit.author, commit.message);
+                        if let Some(score) = matcher.fuzzy_match(&search_text, &query) {
+                            self.fuzzy_results.push(FuzzyResult {
+                                project_name: proj.name.clone(),
+                                branch_name: branch.name.clone(),
+                                commit_id: commit.id.clone(),
+                                commit_message: commit.message.clone(),
+                                commit_author: commit.author.clone(),
+                                commit_date: commit.date.format("%Y-%m-%d %H:%M").to_string(),
+                                score,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        self.fuzzy_results.sort_by(|a, b| b.score.cmp(&a.score));
+        
+        if self.fuzzy_results.len() > 100 {
+            self.fuzzy_results.truncate(100);
+        }
+        
+        if !self.fuzzy_results.is_empty() {
+            self.fuzzy_list_state.select(Some(0));
+        } else {
+            self.fuzzy_list_state.select(None);
         }
     }
 }

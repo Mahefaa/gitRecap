@@ -117,24 +117,42 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 chunks[2].y + 1,
             ));
         },
-        AppMode::InputCommitSearch => {
-            let main_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-                .split(chunks[1]);
+        AppMode::FuzzyFinder => {
+            let layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
+                .split(f.area());
                 
-            render_projects_list(f, app, main_chunks[0]);
-            render_commits_list(f, app, main_chunks[1]);
-            
             let input_widget = Paragraph::new(app.input.value())
                 .style(Style::default().fg(Color::Yellow))
-                .block(Block::default().borders(Borders::ALL).title("Search Commits by message or ID (Esc cancel, Enter submit)"));
-            f.render_widget(input_widget, chunks[2]);
+                .block(Block::default().borders(Borders::ALL).title("Global Fuzzy Finder (Type to search, Esc cancel, Up/Down navigate)"));
+            f.render_widget(input_widget, layout[0]);
+            
             #[allow(clippy::cast_possible_truncation)]
             f.set_cursor_position((
-                chunks[2].x + 1 + app.input.visual_cursor() as u16,
-                chunks[2].y + 1,
+                layout[0].x + 1 + app.input.visual_cursor() as u16,
+                layout[0].y + 1,
             ));
+            
+            let mut list_items = Vec::new();
+            for res in &app.fuzzy_results {
+                let line = Line::from(vec![
+                    Span::styled(format!("[{}] ", res.project_name), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("({}) ", res.branch_name), Style::default().fg(Color::Magenta)),
+                    Span::raw(format!("{} ", res.commit_id.chars().take(7).collect::<String>())),
+                    Span::styled(format!("{} ", res.commit_date), Style::default().fg(Color::Blue)),
+                    Span::styled(format!("[{}] ", res.commit_author), Style::default().fg(Color::LightCyan)),
+                    Span::raw(res.commit_message.clone()),
+                ]);
+                list_items.push(ListItem::new(line));
+            }
+            
+            let list = List::new(list_items)
+                .block(Block::default().borders(Borders::ALL).title(format!("Results: {}", app.fuzzy_results.len())))
+                .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
+                .highlight_symbol(">> ");
+                
+            f.render_stateful_widget(list, layout[1], &mut app.fuzzy_list_state);
         },
         AppMode::Command => {
             let main_chunks = Layout::default()
@@ -434,11 +452,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
     const LIMIT: usize = 1000;
     let mut total_commits_in_view = 0;
     
-    let search_lower = if app.commit_search.is_empty() {
-        None
-    } else {
-        Some(app.commit_search.to_lowercase())
-    };
+
 
     for (proj_idx, proj) in projects_to_show {
         if proj.dates.is_empty() {
@@ -502,11 +516,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                 }
                 
                 for commit in &branch_group.commits {
-                    if let Some(search) = &search_lower {
-                        if !commit.message.to_lowercase().contains(search) && !commit.id.to_lowercase().contains(search) {
-                            continue;
-                        }
-                    }
+
 
                     if commit_count >= LIMIT { break; }
                     
@@ -541,10 +551,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
     }
 
     let title = if app.is_loading { "Commits [LOADING...]" } else { "Commits" };
-    let mut title_with_search = title.to_string();
-    if !app.commit_search.is_empty() {
-        title_with_search = format!("{} (Search: {})", title, app.commit_search);
-    }
+    let title_with_search = title.to_string();
     
     let mut block = Block::default().borders(Borders::ALL).title(title_with_search);
     if matches!(app.mode, AppMode::Details | AppMode::CommitsView) {

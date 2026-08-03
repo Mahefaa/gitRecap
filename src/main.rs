@@ -116,6 +116,10 @@ fn run_app(
                         app.hide_zero_commits = !app.hide_zero_commits;
                     }
                     KeyCode::Char('?') => app.mode = AppMode::Help,
+                    KeyCode::Char('/') => {
+                        app.enter_input_mode(AppMode::FuzzyFinder);
+                        app.execute_fuzzy_search();
+                    }
                     _ => {}
                 },
                 AppMode::CommitsView | AppMode::Details => {
@@ -135,7 +139,10 @@ fn run_app(
                             }
                         },
                         KeyCode::Char('c') => app.toggle_expand_from_commits_view(),
-                        KeyCode::Char('/') => app.enter_input_mode(AppMode::InputCommitSearch),
+                        KeyCode::Char('/') => {
+                            app.enter_input_mode(AppMode::FuzzyFinder);
+                            app.execute_fuzzy_search();
+                        }
                         KeyCode::Char(':') => app.enter_input_mode(AppMode::Command),
                         KeyCode::Char('G') => {
                             let last = app.commit_list_map.len().saturating_sub(1);
@@ -175,15 +182,44 @@ fn run_app(
                         _ => {}
                     }
                 },
-                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::InputCommitSearch | AppMode::Command => {
+                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::Command => {
                     match key.code {
                         KeyCode::Enter => app.submit_input(),
                         KeyCode::Esc => app.cancel_input(),
                         _ => {
                             app.input.handle_event(&Event::Key(key));
-                            if matches!(app.mode, AppMode::InputCommitSearch) {
-                                app.commit_search = app.input.value().to_string();
+                        }
+                    }
+                },
+                AppMode::FuzzyFinder => {
+                    match key.code {
+                        KeyCode::Enter => {
+                            // Can be extended to jump to commit later. For now, just exit.
+                            app.cancel_input();
+                        }
+                        KeyCode::Esc => {
+                            app.fuzzy_results.clear();
+                            app.cancel_input();
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            if !app.fuzzy_results.is_empty() {
+                                let current = app.fuzzy_list_state.selected().unwrap_or(0);
+                                if current < app.fuzzy_results.len().saturating_sub(1) {
+                                    app.fuzzy_list_state.select(Some(current + 1));
+                                }
                             }
+                        }
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            if !app.fuzzy_results.is_empty() {
+                                let current = app.fuzzy_list_state.selected().unwrap_or(0);
+                                if current > 0 {
+                                    app.fuzzy_list_state.select(Some(current - 1));
+                                }
+                            }
+                        }
+                        _ => {
+                            app.input.handle_event(&Event::Key(key));
+                            app.execute_fuzzy_search();
                         }
                     }
                 },

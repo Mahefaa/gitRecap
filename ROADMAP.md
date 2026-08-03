@@ -26,7 +26,7 @@ It ensures we do not lose track of the ambitious goals set for this project.
    - Pressing `Enter` on a commit opens a syntax-highlighted diff (via `git show`) in a bottom split pane.
 2. **Interactive Commit Editing**
    - Press `E` on an unpushed commit to open `$EDITOR` and seamlessly run `git commit --amend` to rewrite history.
-3. **Global Fuzzy Finder**
+3. **Global Fuzzy Finder** (Completed)
    - Press `/` to trigger a global fuzzy search window (similar to `fzf`) across all projects, branches, and commits simultaneously.
 4. **Activity Dashboard**
    - A dedicated `AppMode::Dashboard` featuring `ratatui` charts (heatmaps, bar charts) visualizing commit frequency and productivity over the selected timeline.
