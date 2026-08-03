@@ -41,6 +41,7 @@ pub struct ProjectData {
     pub enabled: bool,
     pub dates: Vec<DateGroup>,
     pub is_expanded: bool,
+    pub last_commit_info: String,
 }
 
 #[derive(Clone)]
@@ -229,12 +230,14 @@ impl App {
                     }
                 }
 
+                let last_commit_info = crate::git_utils::get_last_commit_info(&repo_path).unwrap_or_else(|| "(0 commits)".to_string());
                 let _ = tx.send(LoadingResult::ProjectScanned(ProjectData {
                     name,
                     path: repo_path.clone(),
                     enabled,
                     dates,
                     is_expanded: true,
+                    last_commit_info,
                 }));
                 
                 crate::git_utils::get_recent_authors(&repo_path)

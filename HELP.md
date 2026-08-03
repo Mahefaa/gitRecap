@@ -24,22 +24,31 @@ Filters allow you to slice your Git history effortlessly.
 - `a`: Set **Author filter** (e.g., "John Doe"). Leave empty or type "Any" to clear.
 - `b`: Set **Branch filter** (e.g., "main", "feat-auth").
 - `d`: Set **Date filter**.
-  - gitRecap supports **Natural Language**! You can type:
-    - `"today"`
-    - `"yesterday"`
-    - `"3 days"` or `"3d"`
-    - `"1 week"` or `"1w"`
-    - `"startofmonth"` or `"endofmonth"`
-    - Absolute ranges: `"2023-01-01..2023-01-31"`
-  - *Note:* Natural language tags like "today" are evaluated dynamically *every time you open the app*, ensuring your profile is always up to date with real time!
+  - This allows you to filter commits strictly within a certain timeframe. 
+  - **Natural Language Parsing**: gitRecap understands human language to dynamically resolve dates. Try typing:
+    - `"today"`: Commits from midnight today to now.
+    - `"yesterday"`: Commits strictly from yesterday.
+    - `"3 days"` or `"3d"`: Commits from exactly 3 days ago.
+    - `"1 week"` or `"1w"`: Commits from exactly 1 week ago.
+    - `"startofmonth"` or `"endofmonth"`: Commits relating to the current month boundaries.
+    - `"january"` or `"jan"`: Filter by specific months of the current year.
+  - **Absolute date ranges**: Specify precise bounding ranges using the `..` operator:
+    - `"2023-01-01..2023-01-31"`: Commits between Jan 1st and Jan 31st.
+    - `"since 2023-01-01"`: Commits from Jan 1st to right now.
+  - *Magic behavior:* All natural language tags like "today" are saved as string tokens in your config, meaning if you open your profile tomorrow, "today" will be evaluated against tomorrow's date! No manual updating required!
 - `/`: **Fuzzy Search / Filter commits dynamically**. Press `/` and start typing to instantly filter the visible commits based on their message.
 
 ---
 
 ## 🗂️ Profiles & Project Management
-Profiles allow you to maintain entirely separate workspaces (e.g., "work" vs. "personal"). Each profile tracks its own repositories, author names, branch filters, and date filters!
+Profiles allow you to maintain entirely separate, parallel workspaces for different contexts (e.g., "work", "open-source", "personal"). 
+Each profile operates completely independently. When you switch to a profile, gitRecap instantly loads that profile's tracked repositories, its active author filter, its branch filter, its date filter, and even its specific UI toggles.
 
-- `P`: **Switch or Create Profile**. Type a name. If it exists, gitRecap will instantly load its configuration and repositories. If it doesn't exist, it will create a new blank workspace for you.
+- `P`: **Switch or Create Profile**. 
+  - Type the name of a profile you want to switch to. 
+  - If the profile exists, gitRecap will instantly load it without needing a restart.
+  - If the profile doesn't exist, gitRecap creates a fresh blank workspace for you.
+  - The `default` profile is used if you haven't created one.
 - `A`: Add a specific folder to the tracker manually.
 - `.` : Add your current working directory to the tracker.
 - `p`: Open the visual **File Explorer** to navigate your filesystem and add root project folders.

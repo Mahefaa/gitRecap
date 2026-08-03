@@ -484,7 +484,7 @@ fn render_projects_list(f: &mut Frame, app: &mut App, area: Rect) {
                 if count > 0 {
                     format!("({} commits)", count)
                 } else {
-                    crate::git_utils::get_last_commit_info(&p.path).unwrap_or_else(|| "(0 commits)".to_string())
+                    p.last_commit_info.clone()
                 }
             } else {
                 "(disabled)".to_string()
