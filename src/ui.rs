@@ -334,7 +334,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                     Span::raw("    "),
                     push_status,
                     Span::raw(format!("{} ", commit.id.chars().take(7).collect::<String>())),
-                    Span::styled(format!("{} ", commit.date.format("%H:%M")), Style::default().fg(Color::Blue)),
+                    Span::styled(format!("{} ", commit.date.format("%Y-%m-%d %H:%M")), Style::default().fg(Color::Blue)),
                     Span::styled(format!(" [{}] ", commit.author), Style::default().fg(Color::Cyan)),
                     Span::raw(&commit.message),
                 ]);
