@@ -433,6 +433,12 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
     let mut commit_count = 0;
     const LIMIT: usize = 1000;
     let mut total_commits_in_view = 0;
+    
+    let search_lower = if app.commit_search.is_empty() {
+        None
+    } else {
+        Some(app.commit_search.to_lowercase())
+    };
 
     for (proj_idx, proj) in projects_to_show {
         if proj.dates.is_empty() {
@@ -496,9 +502,8 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                 }
                 
                 for commit in &branch_group.commits {
-                    if !app.commit_search.is_empty() {
-                        let search_lower = app.commit_search.to_lowercase();
-                        if !commit.message.to_lowercase().contains(&search_lower) && !commit.id.to_lowercase().contains(&search_lower) {
+                    if let Some(search) = &search_lower {
+                        if !commit.message.to_lowercase().contains(search) && !commit.id.to_lowercase().contains(search) {
                             continue;
                         }
                     }
