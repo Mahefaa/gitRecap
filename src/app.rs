@@ -819,40 +819,58 @@ impl App {
         use std::io::Write;
 
         let mut file = File::create(path)?;
+        writeln!(file, "# Git Recap Summary\n")?;
 
         for proj in &self.projects {
             if !proj.enabled || proj.dates.is_empty() {
                 continue;
             }
             
-            let mut has_commits = false;
-            let mut proj_output = format!("- {}(", proj.name);
+            let mut proj_has_commits = false;
+            let mut proj_content = String::new();
             
-            let mut date_strings = Vec::new();
             for date_group in &proj.dates {
-                let mut branch_strings = Vec::new();
+                let mut date_has_commits = false;
+                let mut date_content = format!("### {}\n\n", date_group.date);
+                
                 for branch in &date_group.branches {
                     if branch.commits.is_empty() { continue; }
-                    has_commits = true;
+                    proj_has_commits = true;
+                    date_has_commits = true;
                     
-                    let commit_summaries: Vec<String> = branch.commits
-                        .iter()
-                        .map(|c| {
-                            format!("{} {}", c.id.chars().take(7).collect::<String>(), c.message.chars().take(30).collect::<String>())
-                        })
-                        .collect();
+                    date_content.push_str(&format!("#### Branch: `{}`\n\n", branch.name));
                     
-                    branch_strings.push(format!("{}({})", branch.name, commit_summaries.join(", ")));
+                    for c in &branch.commits {
+                        date_content.push_str(&format!("- **[{}]** `{}` {}\n", c.author, c.id.chars().take(7).collect::<String>(), c.message));
+                        
+                        // Fetch modified files
+                        if let Ok(output) = std::process::Command::new("git")
+                            .arg("show")
+                            .arg("--name-only")
+                            .arg("--format=")
+                            .arg(&c.id)
+                            .current_dir(&proj.path)
+                            .output() {
+                                let files = String::from_utf8_lossy(&output.stdout);
+                                for line in files.lines() {
+                                    let line = line.trim();
+                                    if !line.is_empty() {
+                                        date_content.push_str(&format!("  - `{}`\n", line));
+                                    }
+                                }
+                            }
+                    }
+                    date_content.push('\n');
                 }
-                if !branch_strings.is_empty() {
-                    date_strings.push(format!("{}: {}", date_group.date, branch_strings.join(", ")));
+                
+                if date_has_commits {
+                    proj_content.push_str(&date_content);
                 }
             }
             
-            if has_commits {
-                proj_output.push_str(&date_strings.join("; "));
-                proj_output.push_str(")\n");
-                file.write_all(proj_output.as_bytes())?;
+            if proj_has_commits {
+                writeln!(file, "## Repository: {}\n", proj.name)?;
+                file.write_all(proj_content.as_bytes())?;
             }
         }
 
