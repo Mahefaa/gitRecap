@@ -116,9 +116,11 @@ impl App {
         app
     }
 
-    pub fn check_background_tasks(&mut self) {
+    pub fn check_background_tasks(&mut self) -> bool {
+        let mut updated = false;
         if let Some(rx) = &self.loading_rx {
             while let Ok(result) = rx.try_recv() {
+                updated = true;
                 match result {
                     LoadingResult::ProjectScanned(proj) => {
                         self.projects.push(proj);
@@ -143,6 +145,7 @@ impl App {
                 }
             }
         }
+        updated
     }
 
     pub fn add_source(&mut self, path: PathBuf) {

@@ -43,9 +43,16 @@ fn run_app(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     app: &mut App,
 ) -> io::Result<()> {
+    let mut needs_redraw = true;
     loop {
-        app.check_background_tasks();
-        terminal.draw(|f| ui::ui(f, app))?;
+        if app.check_background_tasks() {
+            needs_redraw = true;
+        }
+        
+        if needs_redraw || app.is_loading {
+            terminal.draw(|f| ui::ui(f, app))?;
+            needs_redraw = false;
+        }
 
         if event::poll(std::time::Duration::from_millis(50))? {
             loop {
@@ -54,6 +61,7 @@ fn run_app(
                     if key.kind != KeyEventKind::Press {
                         continue;
                     }
+                    needs_redraw = true;
                     if key.code == KeyCode::Char('c') && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
                         app.should_quit = true;
                         continue;
@@ -248,6 +256,7 @@ fn run_app(
         }
                 Event::Mouse(mouse_event) => {
                     app.handle_mouse_event(mouse_event);
+                    needs_redraw = true;
                 }
                 _ => {}
                 }
