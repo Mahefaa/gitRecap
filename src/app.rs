@@ -421,6 +421,13 @@ impl App {
                     }
                 }
             }
+            AppMode::CommitsView => {
+                let i = match self.commit_list_state.selected() {
+                    Some(i) => if i == 0 { 0 } else { i - 1 },
+                    None => 0,
+                };
+                self.commit_list_state.select(Some(i));
+            }
             AppMode::InputAuthor => {
                 let filtered = self.get_filtered_authors();
                 if !filtered.is_empty() {
@@ -444,6 +451,13 @@ impl App {
                     self.commit_list_state.select(Some(0));
                 }
             }
+        }
+    }
+
+    pub fn enter_commits_view(&mut self) {
+        self.mode = AppMode::CommitsView;
+        if self.commit_list_state.selected().is_none() {
+            self.commit_list_state.select(Some(0));
         }
     }
 

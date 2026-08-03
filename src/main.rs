@@ -56,7 +56,7 @@ fn run_app(
                     match app.mode {
                 AppMode::Normal => match key.code {
                     KeyCode::Right if key.modifiers.contains(crossterm::event::KeyModifiers::ALT) => {
-                        app.mode = AppMode::CommitsView;
+                        app.enter_commits_view();
                     },
                     KeyCode::Char('q') => app.quit(),
                     KeyCode::Char('j') | KeyCode::Down => app.next_item(),

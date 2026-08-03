@@ -301,14 +301,18 @@ fn render_projects_list(f: &mut Frame, app: &mut App, area: Rect) {
         block = block.border_style(Style::default().fg(Color::Yellow));
     }
 
+    let is_active = matches!(app.mode, AppMode::Normal);
+    let hl_style = if is_active {
+        Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().add_modifier(Modifier::BOLD)
+    };
+    let hl_symbol = if is_active { ">> " } else { "   " };
+
     let items = List::new(items)
         .block(block)
-        .highlight_style(
-            Style::default()
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol(">> ");
+        .highlight_style(hl_style)
+        .highlight_symbol(hl_symbol);
 
     f.render_stateful_widget(items, area, &mut app.project_list_state);
 }
@@ -440,14 +444,18 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
         block = block.border_style(Style::default().fg(Color::Yellow));
     }
 
+    let is_active = matches!(app.mode, AppMode::Details | AppMode::CommitsView);
+    let hl_style = if is_active {
+        Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().add_modifier(Modifier::BOLD)
+    };
+    let hl_symbol = if is_active { ">> " } else { "   " };
+
     let items = List::new(items)
         .block(block)
-        .highlight_style(
-            Style::default()
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol(">> ");
+        .highlight_style(hl_style)
+        .highlight_symbol(hl_symbol);
 
     f.render_stateful_widget(items, area, &mut app.commit_list_state);
 }
