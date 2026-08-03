@@ -11,12 +11,13 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::{error::Error, io};
+use std::{error::Error, io::{self, BufWriter}};
 use tui_input::backend::crossterm::EventHandler;
 
 fn main() -> Result<(), Box<dyn Error>> {
     enable_raw_mode()?;
-    let mut stdout = io::stdout();
+    let stdout = io::stdout();
+    let mut stdout = BufWriter::new(stdout);
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -25,8 +26,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let res = run_app(&mut terminal, &mut app);
 
     disable_raw_mode()?;
+    let stdout = io::stdout();
+    let mut stdout = BufWriter::new(stdout);
     execute!(
-        terminal.backend_mut(),
+        stdout,
         LeaveAlternateScreen,
         DisableMouseCapture
     )?;
@@ -40,7 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn run_app(
-    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+    terminal: &mut Terminal<CrosstermBackend<BufWriter<std::io::Stdout>>>,
     app: &mut App,
 ) -> io::Result<()> {
     let mut needs_redraw = true;
