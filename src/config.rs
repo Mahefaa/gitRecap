@@ -29,7 +29,9 @@ pub struct AppConfig {
 
 impl AppConfig {
     fn get_config_path() -> PathBuf {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| ".".to_string());
         let config_dir = PathBuf::from(home).join(".config").join("git-recap");
         fs::create_dir_all(&config_dir).unwrap_or(());
         config_dir.join("config.json")
