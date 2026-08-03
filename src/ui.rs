@@ -171,7 +171,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             render_commits_list(f, app, main_chunks[1]);
             
             let help_text = match app.mode {
-                AppMode::Normal => "q: Quit | P: Profile | a: Author | d: Date | b: Branch | p: Explorer | A: Add Path | l/Enter: Commits | Space: Toggle | s: Toggle All | c: Collapse | r: Rm | R: Refresh | e: Export | u: Push",
+                AppMode::Normal => "q: Quit | P: Profile | a: Author | d: Date | b: Branch | p: Explorer | A: Add Path | l/Enter: Commits | Space: Toggle | s: Toggle All | c: Collapse | r: Rm | D: Rm All | R: Refresh | e: Export | u: Push",
                 AppMode::Details => "q: Quit | h/Esc: Back | j/k: Navigate Commits | e: Export",
                 _ => "",
             };

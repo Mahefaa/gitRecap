@@ -292,6 +292,21 @@ impl App {
             }
     }
 
+    pub fn remove_all_projects(&mut self) {
+        if self.projects.is_empty() { return; }
+        for proj in &self.projects {
+            let path = proj.path.clone();
+            if !self.current_profile.removed_projects.contains(&path) {
+                self.current_profile.removed_projects.push(path);
+            }
+        }
+        self.config.update_active_profile(self.current_profile.clone());
+        self.projects.clear();
+        self.project_list_state.select(None);
+        self.selected_project_idx = None;
+        self.commit_list_state.select(None);
+    }
+
     pub fn quit(&mut self) {
         self.should_quit = true;
     }

@@ -68,6 +68,7 @@ fn run_app(
                     KeyCode::Char('b') => app.enter_input_mode(AppMode::InputBranch),
                     KeyCode::Char('R') => app.reload_data(),
                     KeyCode::Char('r') | KeyCode::Delete => app.remove_project(),
+                    KeyCode::Char('D') => app.remove_all_projects(),
                     KeyCode::Char('u') => app.mode = AppMode::ConfirmPush { force: false },
                     KeyCode::Char('U') => app.mode = AppMode::ConfirmPush { force: true },
                     KeyCode::Char('A') => app.enter_input_mode(AppMode::InputAddSource),
