@@ -48,11 +48,12 @@ fn run_app(
         terminal.draw(|f| ui::ui(f, app))?;
 
         if event::poll(std::time::Duration::from_millis(50))? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind != KeyEventKind::Press {
-                    continue;
-                }
-                match app.mode {
+            match event::read()? {
+                Event::Key(key) => {
+                    if key.kind != KeyEventKind::Press {
+                        continue;
+                    }
+                    match app.mode {
                 AppMode::Normal => match key.code {
                     KeyCode::Right if key.modifiers.contains(crossterm::event::KeyModifiers::ALT) => {
                         app.mode = AppMode::CommitsView;
@@ -196,10 +197,15 @@ fn run_app(
                 }
                 _ => {}
             }
-            }
         }
-        if app.should_quit {
-            return Ok(());
+        Event::Mouse(mouse_event) => {
+            app.handle_mouse_event(mouse_event);
+        }
+        _ => {}
         }
     }
+    if app.should_quit {
+        return Ok(());
+    }
+}
 }

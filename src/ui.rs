@@ -186,6 +186,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
                 .split(chunks[1]);
                 
+            app.projects_area = Some(main_chunks[0]);
+            app.commits_area = Some(main_chunks[1]);
+                
             render_projects_list(f, app, main_chunks[0]);
             render_commits_list(f, app, main_chunks[1]);
             

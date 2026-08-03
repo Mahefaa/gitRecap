@@ -1,6 +1,7 @@
 use crate::git_utils::{self, BranchCommits};
 use chrono::{Local, NaiveDate, TimeZone, Datelike};
 use ratatui::widgets::ListState;
+use ratatui::layout::Rect;
 use std::collections::HashSet;
 use std::error::Error;
 use std::path::PathBuf;
@@ -44,6 +45,8 @@ pub struct App {
     pub date_end_filter: chrono::DateTime<Local>,
     pub branch_filter: String,
     pub commit_search: String,
+    pub projects_area: Option<Rect>,
+    pub commits_area: Option<Rect>,
     pub sources: Vec<PathBuf>,
     pub projects: Vec<ProjectData>,
     pub project_list_state: ListState,
@@ -72,6 +75,8 @@ impl App {
             date_end_filter: today_end,
             branch_filter: String::new(),
             commit_search: String::new(),
+            projects_area: None,
+            commits_area: None,
             sources: vec![PathBuf::from(".")],
             projects: Vec::new(),
             project_list_state: ListState::default(),
@@ -562,6 +567,51 @@ impl App {
 
     pub fn cancel_input(&mut self) {
         self.mode = AppMode::Normal;
+    }
+
+    pub fn handle_mouse_event(&mut self, event: crossterm::event::MouseEvent) {
+        use crossterm::event::{MouseEventKind, MouseButton};
+        if let MouseEventKind::Down(MouseButton::Left) = event.kind {
+            if let Some(pa) = self.projects_area {
+                if pa.x <= event.column && event.column < pa.x + pa.width && pa.y <= event.row && event.row < pa.y + pa.height {
+                    self.mode = AppMode::Normal;
+                    let offset = self.project_list_state.offset();
+                    let clicked_idx = offset.saturating_add((event.row.saturating_sub(pa.y).saturating_sub(1)) as usize);
+                    if clicked_idx < self.projects.len() {
+                        self.project_list_state.select(Some(clicked_idx));
+                        self.selected_project_idx = Some(clicked_idx);
+                        self.toggle_project();
+                    }
+                }
+            }
+            if let Some(ca) = self.commits_area {
+                if ca.x <= event.column && event.column < ca.x + ca.width && ca.y <= event.row && event.row < ca.y + ca.height {
+                    if matches!(self.mode, AppMode::Normal) {
+                        self.mode = AppMode::CommitsView;
+                    }
+                }
+            }
+        } else if let MouseEventKind::ScrollDown = event.kind {
+            if matches!(self.mode, AppMode::Normal) {
+                self.next_item();
+            } else if matches!(self.mode, AppMode::CommitsView | AppMode::Details) {
+                let i = match self.commit_list_state.selected() {
+                    Some(i) => i.saturating_add(1),
+                    None => 0,
+                };
+                self.commit_list_state.select(Some(i));
+            }
+        } else if let MouseEventKind::ScrollUp = event.kind {
+            if matches!(self.mode, AppMode::Normal) {
+                self.previous_item();
+            } else if matches!(self.mode, AppMode::CommitsView | AppMode::Details) {
+                let i = match self.commit_list_state.selected() {
+                    Some(i) => i.saturating_sub(1),
+                    None => 0,
+                };
+                self.commit_list_state.select(Some(i));
+            }
+        }
     }
 
     pub fn export_summary(&self, path: &str) -> Result<(), Box<dyn Error>> {
