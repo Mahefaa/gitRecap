@@ -117,6 +117,25 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 chunks[2].y + 1,
             ));
         },
+        AppMode::InputCommitSearch => {
+            let main_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+                .split(chunks[1]);
+                
+            render_projects_list(f, app, main_chunks[0]);
+            render_commits_list(f, app, main_chunks[1]);
+            
+            let input_widget = Paragraph::new(app.input.value())
+                .style(Style::default().fg(Color::Yellow))
+                .block(Block::default().borders(Borders::ALL).title("Search Commits by message or ID (Esc cancel, Enter submit)"));
+            f.render_widget(input_widget, chunks[2]);
+            #[allow(clippy::cast_possible_truncation)]
+            f.set_cursor_position((
+                chunks[2].x + 1 + app.input.visual_cursor() as u16,
+                chunks[2].y + 1,
+            ));
+        },
         AppMode::InputProfile => {
             let main_chunks = Layout::default()
                 .direction(Direction::Horizontal)
@@ -161,7 +180,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 chunks[2].y + 1,
             ));
         },
-        AppMode::Normal | AppMode::Details => {
+        AppMode::Normal | AppMode::Details | AppMode::CommitsView => {
             let main_chunks = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
@@ -171,8 +190,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             render_commits_list(f, app, main_chunks[1]);
             
             let help_text = match app.mode {
-                AppMode::Normal => "q: Quit | P: Profile | a: Author | d: Date | b: Branch | p: Explorer | A: Add Path | l/Enter: Commits | Space: Toggle | s: Toggle All | c: Collapse | r: Rm | D: Rm All | R: Refresh | e: Export | u: Push",
-                AppMode::Details => "q: Quit | h/Esc: Back | j/k: Navigate Commits | e: Export",
+                AppMode::Normal => "q: Quit | P: Profile | a: Author | d: Date | b: Branch | p: Explorer | A: Add Path | l/Enter: Commits | Alt+Right: View Commits | Space: Toggle | s: Toggle All | c: Collapse | r: Rm | D: Rm All | R: Refresh | e: Export | u: Push",
+                AppMode::Details => "q: Quit | h/Esc/Alt+Left: Back | j/k: Navigate Commits | /: Search Commits | e: Export",
+                AppMode::CommitsView => "q: Quit | h/Esc/Alt+Left: Back | j/k: Navigate Commits | /: Search Commits | e: Export",
                 _ => "",
             };
             let footer = Paragraph::new(help_text).block(Block::default().borders(Borders::ALL));
@@ -252,6 +272,7 @@ fn render_projects_list(f: &mut Frame, app: &mut App, area: Rect) {
         .iter()
         .map(|p| {
             let checkbox = if p.enabled { "[x]" } else { "[ ]" };
+            let collapse_icon = if p.is_expanded { "[-]" } else { "[+]" };
             let style = if p.enabled { Style::default() } else { Style::default().fg(Color::DarkGray) };
             
             let commit_count = if p.enabled {
@@ -262,7 +283,7 @@ fn render_projects_list(f: &mut Frame, app: &mut App, area: Rect) {
             };
             
             let line = Line::from(vec![
-                Span::styled(format!("{} ", checkbox), style),
+                Span::styled(format!("{} {} ", checkbox, collapse_icon), style),
                 Span::styled(format!("{} ", p.name), style),
                 Span::styled(commit_count, style),
             ]);
@@ -349,6 +370,13 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
             let mut last_author = String::new();
             
             for commit in &branch.commits {
+                if !app.commit_search.is_empty() {
+                    let search_lower = app.commit_search.to_lowercase();
+                    if !commit.message.to_lowercase().contains(&search_lower) && !commit.id.to_lowercase().contains(&search_lower) {
+                        continue;
+                    }
+                }
+
                 if commit_count >= LIMIT {
                     break;
                 }
@@ -399,8 +427,13 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
     }
 
     let title = if app.is_loading { "Commits [LOADING...]" } else { "Commits" };
-    let mut block = Block::default().borders(Borders::ALL).title(title);
-    if let AppMode::Details = app.mode {
+    let mut title_with_search = title.to_string();
+    if !app.commit_search.is_empty() {
+        title_with_search = format!("{} (Search: {})", title, app.commit_search);
+    }
+    
+    let mut block = Block::default().borders(Borders::ALL).title(title_with_search);
+    if matches!(app.mode, AppMode::Details | AppMode::CommitsView) {
         block = block.border_style(Style::default().fg(Color::Yellow));
     }
 

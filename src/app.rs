@@ -19,6 +19,8 @@ pub enum AppMode {
     InputAddSource,
     ExplorerJumpPath,
     InputBranch,
+    CommitsView,
+    InputCommitSearch,
 }
 
 pub enum LoadingResult {
@@ -41,6 +43,7 @@ pub struct App {
     pub date_start_filter: chrono::DateTime<Local>,
     pub date_end_filter: chrono::DateTime<Local>,
     pub branch_filter: String,
+    pub commit_search: String,
     pub sources: Vec<PathBuf>,
     pub projects: Vec<ProjectData>,
     pub project_list_state: ListState,
@@ -61,11 +64,14 @@ pub struct App {
 
 impl App {
     pub fn new() -> App {
+        let today_start = Local::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_local_timezone(Local).unwrap();
+        let today_end = Local::now().date_naive().and_hms_opt(23, 59, 59).unwrap().and_local_timezone(Local).unwrap();
         let mut app = App {
             author_filter: "Any".to_string(),
-            date_start_filter: Local::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_local_timezone(Local).unwrap(),
-            date_end_filter: Local::now().date_naive().and_hms_opt(23, 59, 59).unwrap().and_local_timezone(Local).unwrap(),
+            date_start_filter: today_start,
+            date_end_filter: today_end,
             branch_filter: String::new(),
+            commit_search: String::new(),
             sources: vec![PathBuf::from(".")],
             projects: Vec::new(),
             project_list_state: ListState::default(),
@@ -324,6 +330,13 @@ impl App {
                     self.commit_list_state.select(None);
                 }
             }
+            AppMode::CommitsView => {
+                let i = match self.commit_list_state.selected() {
+                    Some(i) => i.saturating_add(1),
+                    None => 0,
+                };
+                self.commit_list_state.select(Some(i));
+            }
             AppMode::Details => {
                 if let Some(proj_idx) = self.selected_project_idx {
                     if proj_idx < self.projects.len() {
@@ -449,6 +462,9 @@ impl App {
             AppMode::InputBranch => {
                 self.input = self.input.clone().with_value(self.branch_filter.clone());
             },
+            AppMode::InputCommitSearch => {
+                self.input = self.input.clone().with_value(self.commit_search.clone());
+            },
             AppMode::InputProfile => {
                 self.input = self.input.clone().with_value(self.current_profile.name.clone());
             },
@@ -499,6 +515,11 @@ impl App {
             AppMode::InputBranch => {
                 self.branch_filter = self.input.value().to_string();
                 self.reload_data();
+            }
+            AppMode::InputCommitSearch => {
+                self.commit_search = self.input.value().to_lowercase();
+                self.mode = AppMode::CommitsView;
+                return;
             }
             AppMode::InputProfile => {
                 let name = self.input.value().to_string();

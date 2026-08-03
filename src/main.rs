@@ -54,6 +54,9 @@ fn run_app(
                 }
                 match app.mode {
                 AppMode::Normal => match key.code {
+                    KeyCode::Right if key.modifiers.contains(crossterm::event::KeyModifiers::ALT) => {
+                        app.mode = AppMode::CommitsView;
+                    },
                     KeyCode::Char('q') => app.quit(),
                     KeyCode::Char('j') | KeyCode::Down => app.next_item(),
                     KeyCode::Char('k') | KeyCode::Up => app.previous_item(),
@@ -82,15 +85,25 @@ fn run_app(
                     }
                     _ => {}
                 },
-                AppMode::Details => match key.code {
-                    KeyCode::Char('q') => app.quit(),
-                    KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left => app.leave_details(),
-                    KeyCode::Char('j') | KeyCode::Down => app.next_item(),
-                    KeyCode::Char('k') | KeyCode::Up => app.previous_item(),
-                    KeyCode::Char('e') => {
-                        let _ = app.export_summary("summary.txt");
+                AppMode::CommitsView | AppMode::Details => {
+                    match key.code {
+                        KeyCode::Left if key.modifiers.contains(crossterm::event::KeyModifiers::ALT) => {
+                            app.leave_details();
+                        },
+                        KeyCode::Char('q') => app.quit(),
+                        KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left => app.leave_details(),
+                        KeyCode::Char('j') | KeyCode::Down => app.next_item(),
+                        KeyCode::Char('k') | KeyCode::Up => app.previous_item(),
+                        KeyCode::Char('e') => {
+                            if let Err(e) = app.export_summary("summary.txt") {
+                                app.flash_message = Some(format!("Export failed: {}", e));
+                            } else {
+                                app.flash_message = Some("Exported to summary.txt".to_string());
+                            }
+                        },
+                        KeyCode::Char('/') => app.enter_input_mode(AppMode::InputCommitSearch),
+                        _ => {}
                     }
-                    _ => {}
                 },
                 AppMode::InputAuthor => {
                     match key.code {
@@ -104,7 +117,7 @@ fn run_app(
                         }
                     }
                 },
-                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch => {
+                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::InputCommitSearch => {
                     match key.code {
                         KeyCode::Enter => app.submit_input(),
                         KeyCode::Esc => app.cancel_input(),
