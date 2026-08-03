@@ -252,7 +252,8 @@ fn render_projects_list(f: &mut Frame, app: &mut App, area: Rect) {
         })
         .collect();
 
-    let mut block = Block::default().borders(Borders::ALL).title("Projects");
+    let title = if app.is_loading { "Projects [LOADING...]" } else { "Projects" };
+    let mut block = Block::default().borders(Borders::ALL).title(title);
     if let AppMode::Normal = app.mode {
         block = block.border_style(Style::default().fg(Color::Yellow));
     }
@@ -350,7 +351,8 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
         ])));
     }
 
-    let mut block = Block::default().borders(Borders::ALL).title("Commits");
+    let title = if app.is_loading { "Commits [LOADING...]" } else { "Commits" };
+    let mut block = Block::default().borders(Borders::ALL).title(title);
     if let AppMode::Details = app.mode {
         block = block.border_style(Style::default().fg(Color::Yellow));
     }

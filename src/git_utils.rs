@@ -3,6 +3,7 @@ use chrono::{DateTime, Local};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
+#[derive(Clone)]
 pub struct GitCommit {
     pub id: String,
     pub message: String,
@@ -11,6 +12,7 @@ pub struct GitCommit {
     pub is_pushed: bool,
 }
 
+#[derive(Clone)]
 pub struct BranchCommits {
     pub name: String,
     pub commits: Vec<GitCommit>,

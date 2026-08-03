@@ -44,10 +44,12 @@ fn run_app(
     app: &mut App,
 ) -> io::Result<()> {
     loop {
+        app.check_background_tasks();
         terminal.draw(|f| ui::ui(f, app))?;
 
-        if let Event::Key(key) = event::read()? {
-            match app.mode {
+        if event::poll(std::time::Duration::from_millis(50))? {
+            if let Event::Key(key) = event::read()? {
+                match app.mode {
                 AppMode::Normal => match key.code {
                     KeyCode::Char('q') => app.quit(),
                     KeyCode::Char('j') | KeyCode::Down => app.next_item(),
@@ -172,6 +174,7 @@ fn run_app(
                     app.flash_message = None;
                 }
                 _ => {}
+            }
             }
         }
         if app.should_quit {

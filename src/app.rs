@@ -20,6 +20,12 @@ pub enum AppMode {
     ExplorerJumpPath,
 }
 
+pub enum LoadingResult {
+    ScanComplete(Vec<ProjectData>, Vec<String>),
+    ReloadComplete(Vec<ProjectData>),
+}
+
+#[derive(Clone)]
 pub struct ProjectData {
     pub name: String,
     pub path: PathBuf,
@@ -45,6 +51,8 @@ pub struct App {
     pub config: AppConfig,
     pub current_profile: AppProfile,
     pub flash_message: Option<String>,
+    pub is_loading: bool,
+    pub loading_rx: Option<std::sync::mpsc::Receiver<LoadingResult>>,
 }
 
 impl App {
@@ -67,13 +75,36 @@ impl App {
             config: AppConfig::load(),
             current_profile: AppProfile::default(),
             flash_message: None,
+            is_loading: false,
+            loading_rx: None,
         };
         app.current_profile = app.config.get_active_profile();
         app.sources = app.current_profile.sources.clone();
         
         app.scan_sources();
-        app.reload_data();
         app
+    }
+
+    pub fn check_background_tasks(&mut self) {
+        if let Some(rx) = &self.loading_rx {
+            if let Ok(result) = rx.try_recv() {
+                match result {
+                    LoadingResult::ScanComplete(new_projects, authors) => {
+                        self.projects = new_projects;
+                        self.known_authors = authors;
+                        if !self.projects.is_empty() && self.selected_project_idx.is_none() {
+                            self.project_list_state.select(Some(0));
+                            self.selected_project_idx = Some(0);
+                        }
+                    }
+                    LoadingResult::ReloadComplete(updated_projects) => {
+                        self.projects = updated_projects;
+                    }
+                }
+                self.is_loading = false;
+                self.loading_rx = None;
+            }
+        }
     }
 
     pub fn add_source(&mut self, path: PathBuf) {
@@ -99,56 +130,84 @@ impl App {
     }
 
     pub fn scan_sources(&mut self) {
-        let mut authors_set = HashSet::new();
-        
-        for base_path in &self.sources {
-            if !base_path.exists() {
-                continue;
-            }
-            let repos = git_utils::find_git_repos(base_path);
-            for repo_path in repos {
-                let already_exists = self.projects.iter().any(|p| p.path == repo_path);
-                let is_removed = self.current_profile.removed_projects.contains(&repo_path);
-                
-                if !already_exists && !is_removed {
-                    let name = repo_path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                    let enabled = !self.current_profile.disabled_projects.contains(&repo_path);
-                    
-                    self.projects.push(ProjectData {
-                        name,
-                        path: repo_path.clone(),
-                        enabled,
-                        branches: Vec::new(),
-                    });
-                    
-                    for author in git_utils::get_recent_authors(&repo_path) {
-                        authors_set.insert(author);
+        let sources = self.sources.clone();
+        let disabled_projects = self.current_profile.disabled_projects.clone();
+        let removed_projects = self.current_profile.removed_projects.clone();
+        let author_filter = self.author_filter.clone();
+        let start_date = self.date_start_filter;
+        let end_date = self.date_end_filter;
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.is_loading = true;
+        self.loading_rx = Some(rx);
+
+        std::thread::spawn(move || {
+            let mut new_projects = Vec::new();
+            let mut authors_set = std::collections::HashSet::new();
+
+            for base_path in &sources {
+                if !base_path.exists() { continue; }
+                let repos = crate::git_utils::find_git_repos(base_path);
+                for repo_path in repos {
+                    let is_removed = removed_projects.contains(&repo_path);
+                    if !is_removed {
+                        let name = repo_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                        let enabled = !disabled_projects.contains(&repo_path);
+                        
+                        let mut branches = Vec::new();
+                        if enabled {
+                            if let Ok(mut b) = crate::git_utils::get_commits(&repo_path, &author_filter, start_date, end_date) {
+                                for br in &mut b {
+                                    br.commits.sort_by_key(|c| std::cmp::Reverse(c.date));
+                                }
+                                branches = b;
+                            }
+                        }
+
+                        new_projects.push(ProjectData {
+                            name,
+                            path: repo_path.clone(),
+                            enabled,
+                            branches,
+                        });
+                        
+                        for author in crate::git_utils::get_recent_authors(&repo_path) {
+                            authors_set.insert(author);
+                        }
                     }
                 }
             }
-        }
-        
-        let mut sorted_authors: Vec<String> = authors_set.into_iter().collect();
-        sorted_authors.sort();
-        self.known_authors = sorted_authors;
-        
-        if !self.projects.is_empty() && self.selected_project_idx.is_none() {
-            self.project_list_state.select(Some(0));
-            self.selected_project_idx = Some(0);
-        }
+            
+            let mut sorted_authors: Vec<String> = authors_set.into_iter().collect();
+            sorted_authors.sort();
+            let _ = tx.send(LoadingResult::ScanComplete(new_projects, sorted_authors));
+        });
     }
 
     pub fn reload_data(&mut self) {
-        for proj in &mut self.projects {
-            proj.branches.clear();
-            if proj.enabled
-                && let Ok(mut branches) = git_utils::get_commits(&proj.path, &self.author_filter, self.date_start_filter, self.date_end_filter) {
-                    for b in &mut branches {
-                        b.commits.sort_by_key(|c| std::cmp::Reverse(c.date));
+        let mut projects = self.projects.clone();
+        let author_filter = self.author_filter.clone();
+        let start_date = self.date_start_filter;
+        let end_date = self.date_end_filter;
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.is_loading = true;
+        self.loading_rx = Some(rx);
+
+        std::thread::spawn(move || {
+            for proj in &mut projects {
+                proj.branches.clear();
+                if proj.enabled {
+                    if let Ok(mut branches) = crate::git_utils::get_commits(&proj.path, &author_filter, start_date, end_date) {
+                        for b in &mut branches {
+                            b.commits.sort_by_key(|c| std::cmp::Reverse(c.date));
+                        }
+                        proj.branches = branches;
                     }
-                    proj.branches = branches;
                 }
-        }
+            }
+            let _ = tx.send(LoadingResult::ReloadComplete(projects));
+        });
     }
 
     pub fn toggle_project(&mut self) {
