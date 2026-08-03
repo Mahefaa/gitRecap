@@ -102,6 +102,7 @@ fn run_app(
                                 app.flash_message = Some("Exported to summary.txt".to_string());
                             }
                         },
+                        KeyCode::Char('c') => app.toggle_expand_from_commits_view(),
                         KeyCode::Char('/') => app.enter_input_mode(AppMode::InputCommitSearch),
                         _ => {}
                     }

@@ -319,19 +319,20 @@ fn render_projects_list(f: &mut Frame, app: &mut App, area: Rect) {
 
 fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
     let mut items = Vec::new();
+    app.commit_list_project_map.clear();
 
     let mut projects_to_show = Vec::new();
     
     if let AppMode::Details = app.mode {
         if let Some(idx) = app.selected_project_idx {
             if idx < app.projects.len() {
-                projects_to_show.push(&app.projects[idx]);
+                projects_to_show.push((idx, &app.projects[idx]));
             }
         }
     } else {
-        for proj in &app.projects {
+        for (idx, proj) in app.projects.iter().enumerate() {
             if proj.enabled {
-                projects_to_show.push(proj);
+                projects_to_show.push((idx, proj));
             }
         }
     }
@@ -340,7 +341,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
     const LIMIT: usize = 1000;
     let mut total_commits_in_view = 0;
 
-    for proj in projects_to_show {
+    for (proj_idx, proj) in projects_to_show {
         if proj.branches.is_empty() {
             continue;
         }
@@ -356,22 +357,26 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
             items.push(ListItem::new(Line::from(vec![
                 Span::styled(format!("Project: {} (Collapsed)", proj.name), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
             ])));
+            app.commit_list_project_map.push(proj_idx);
             continue;
         }
 
         items.push(ListItem::new(Line::from(vec![
             Span::styled(format!("Project: {} ", proj.name), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
         ])));
+        app.commit_list_project_map.push(proj_idx);
         
         for branch in &proj.branches {
             if commit_count >= LIMIT {
                 break;
             }
-            
-            items.push(ListItem::new(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(format!("Branch: {} ", branch.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
-            ])));
+            if !branch.commits.is_empty() {
+                items.push(ListItem::new(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(format!("Branch: {} ", branch.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+                ])));
+                app.commit_list_project_map.push(proj_idx);
+            }
             
             let mut last_date = String::new();
             let mut last_author = String::new();
@@ -394,6 +399,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                         Span::raw("    "),
                         Span::styled(format!("Date: {} ", current_date), Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
                     ])));
+                    app.commit_list_project_map.push(proj_idx);
                     last_date = current_date;
                     last_author = String::new();
                 }
@@ -404,6 +410,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                         Span::raw("      "),
                         Span::styled(format!("Author: {} ", current_author), Style::default().fg(Color::LightCyan).add_modifier(Modifier::BOLD)),
                     ])));
+                    app.commit_list_project_map.push(proj_idx);
                     last_author = current_author.clone();
                 }
                 
@@ -421,6 +428,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                     Span::raw(format!(" {}", commit.message)),
                 ]);
                 items.push(ListItem::new(vec![line]));
+                app.commit_list_project_map.push(proj_idx);
                 commit_count += 1;
             }
         }
@@ -431,6 +439,8 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
         items.push(ListItem::new(Line::from(vec![
             Span::styled(format!("... and {} more commits (export to see all)", hidden), Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
         ])));
+        // Just push a dummy mapping for the "..." element to maintain array size sync if someone hits 'c' on it
+        app.commit_list_project_map.push(usize::MAX);
     }
 
     let title = if app.is_loading { "Commits [LOADING...]" } else { "Commits" };

@@ -47,6 +47,7 @@ pub struct App {
     pub commit_search: String,
     pub projects_area: Option<Rect>,
     pub commits_area: Option<Rect>,
+    pub commit_list_project_map: Vec<usize>,
     pub sources: Vec<PathBuf>,
     pub projects: Vec<ProjectData>,
     pub project_list_state: ListState,
@@ -77,6 +78,7 @@ impl App {
             commit_search: String::new(),
             projects_area: None,
             commits_area: None,
+            commit_list_project_map: Vec::new(),
             sources: vec![PathBuf::from(".")],
             projects: Vec::new(),
             project_list_state: ListState::default(),
@@ -257,9 +259,20 @@ impl App {
     }
 
     pub fn toggle_expand(&mut self) {
-        if let Some(idx) = self.selected_project_idx {
-            if idx < self.projects.len() {
-                self.projects[idx].is_expanded = !self.projects[idx].is_expanded;
+        if let Some(i) = self.project_list_state.selected() {
+            if i < self.projects.len() {
+                self.projects[i].is_expanded = !self.projects[i].is_expanded;
+            }
+        }
+    }
+
+    pub fn toggle_expand_from_commits_view(&mut self) {
+        if let Some(selected_line) = self.commit_list_state.selected() {
+            if selected_line < self.commit_list_project_map.len() {
+                let proj_idx = self.commit_list_project_map[selected_line];
+                if proj_idx < self.projects.len() {
+                    self.projects[proj_idx].is_expanded = !self.projects[proj_idx].is_expanded;
+                }
             }
         }
     }
