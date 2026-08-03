@@ -10,6 +10,7 @@ pub struct FileEntry {
     pub name: String,
     pub is_dir: bool,
     pub is_git_repo: bool,
+    pub git_info: Option<String>,
 }
 
 pub struct FileExplorerState {
@@ -49,6 +50,7 @@ impl FileExplorerState {
                     name: "..".to_string(),
                     is_dir: true,
                     is_git_repo: false,
+                    git_info: None,
                 });
             }
 
@@ -67,8 +69,12 @@ impl FileExplorerState {
                 }
 
                 let mut is_git_repo = false;
+                let mut git_info = None;
                 if is_dir {
                     is_git_repo = path.join(".git").exists();
+                    if is_git_repo {
+                        git_info = crate::git_utils::get_last_commit_info(&path);
+                    }
                 }
 
                 self.entries.push(FileEntry {
@@ -76,6 +82,7 @@ impl FileExplorerState {
                     name,
                     is_dir,
                     is_git_repo,
+                    git_info,
                 });
             }
         }

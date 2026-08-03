@@ -126,3 +126,16 @@ pub fn get_recent_authors(repo_path: &Path) -> Vec<String> {
         }
     authors
 }
+
+pub fn get_last_commit_info(repo_path: &Path) -> Option<String> {
+    let repo = Repository::open(repo_path).ok()?;
+    let head = repo.head().ok()?;
+    let branch_name = head.shorthand().unwrap_or("unknown");
+    
+    let commit = head.peel_to_commit().ok()?;
+    let commit_time = commit.time().seconds();
+    let local_time = chrono::DateTime::from_timestamp(commit_time, 0).unwrap_or_default();
+    let local_date = chrono::DateTime::<Local>::from(local_time).format("%Y-%m-%d").to_string();
+    
+    Some(format!("(last committed on {} on branch {})", local_date, branch_name))
+}

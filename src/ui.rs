@@ -201,10 +201,17 @@ fn render_file_explorer(f: &mut Frame, app: &mut App, area: Rect) {
             (Style::default().fg(Color::DarkGray), "[FILE] ")
         };
         
-        items.push(ListItem::new(Line::from(vec![
+        let mut spans = vec![
             Span::styled(prefix, style),
             Span::raw(&entry.name),
-        ])));
+        ];
+        
+        if let Some(info) = &entry.git_info {
+            spans.push(Span::raw(" "));
+            spans.push(Span::styled(info.clone(), Style::default().fg(Color::DarkGray)));
+        }
+        
+        items.push(ListItem::new(Line::from(spans)));
     }
     
     let block = Block::default()
