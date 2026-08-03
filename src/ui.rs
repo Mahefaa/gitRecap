@@ -272,32 +272,55 @@ fn render_projects_list(f: &mut Frame, app: &mut App, area: Rect) {
 fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
     let mut items = Vec::new();
 
-    if let Some(idx) = app.selected_project_idx
-        && idx < app.projects.len() {
-            for branch in &app.projects[idx].branches {
-                items.push(ListItem::new(Line::from(vec![
-                    Span::styled(format!("Branch: {} ", branch.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
-                ])));
-                
-                for commit in &branch.commits {
-                    let push_status = if commit.is_pushed {
-                        Span::styled("[Pushed] ", Style::default().fg(Color::Green))
-                    } else {
-                        Span::styled("[Unpushed] ", Style::default().fg(Color::Red))
-                    };
-                    
-                    let line = Line::from(vec![
-                        Span::raw("  "),
-                        push_status,
-                        Span::raw(format!("{} ", commit.id.chars().take(7).collect::<String>())),
-                        Span::styled(format!("{} ", commit.date.format("%H:%M")), Style::default().fg(Color::Blue)),
-                        Span::styled(format!(" [{}] ", commit.author), Style::default().fg(Color::Cyan)),
-                        Span::raw(&commit.message),
-                    ]);
-                    items.push(ListItem::new(vec![line]));
-                }
+    let mut projects_to_show = Vec::new();
+    
+    if let AppMode::Details = app.mode {
+        if let Some(idx) = app.selected_project_idx {
+            if idx < app.projects.len() {
+                projects_to_show.push(&app.projects[idx]);
             }
         }
+    } else {
+        for proj in &app.projects {
+            if proj.enabled {
+                projects_to_show.push(proj);
+            }
+        }
+    }
+
+    for proj in projects_to_show {
+        if proj.branches.is_empty() {
+            continue;
+        }
+        items.push(ListItem::new(Line::from(vec![
+            Span::styled(format!("Project: {} ", proj.name), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        ])));
+        
+        for branch in &proj.branches {
+            items.push(ListItem::new(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(format!("Branch: {} ", branch.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+            ])));
+            
+            for commit in &branch.commits {
+                let push_status = if commit.is_pushed {
+                    Span::styled("[Pushed] ", Style::default().fg(Color::Green))
+                } else {
+                    Span::styled("[Unpushed] ", Style::default().fg(Color::Red))
+                };
+                
+                let line = Line::from(vec![
+                    Span::raw("    "),
+                    push_status,
+                    Span::raw(format!("{} ", commit.id.chars().take(7).collect::<String>())),
+                    Span::styled(format!("{} ", commit.date.format("%H:%M")), Style::default().fg(Color::Blue)),
+                    Span::styled(format!(" [{}] ", commit.author), Style::default().fg(Color::Cyan)),
+                    Span::raw(&commit.message),
+                ]);
+                items.push(ListItem::new(vec![line]));
+            }
+        }
+    }
 
     let mut block = Block::default().borders(Borders::ALL).title("Commits");
     if let AppMode::Details = app.mode {

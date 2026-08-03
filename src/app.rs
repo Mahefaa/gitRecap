@@ -198,13 +198,22 @@ impl App {
             }
             AppMode::Details => {
                 if let Some(proj_idx) = self.selected_project_idx {
-                    let total_commits: usize = self.projects[proj_idx].branches.iter().map(|b| b.commits.len()).sum();
-                    if total_commits > 0 {
-                        let i = match self.commit_list_state.selected() {
-                            Some(i) => if i >= total_commits.saturating_sub(1) { 0 } else { i + 1 },
-                            None => 0,
-                        };
-                        self.commit_list_state.select(Some(i));
+                    if proj_idx < self.projects.len() {
+                        let mut total_rendered = 0;
+                        if !self.projects[proj_idx].branches.is_empty() {
+                            total_rendered += 1; // Project header
+                        }
+                        for b in &self.projects[proj_idx].branches {
+                            total_rendered += 1; // Branch header
+                            total_rendered += b.commits.len();
+                        }
+                        if total_rendered > 0 {
+                            let i = match self.commit_list_state.selected() {
+                                Some(i) => if i >= total_rendered.saturating_sub(1) { 0 } else { i + 1 },
+                                None => 0,
+                            };
+                            self.commit_list_state.select(Some(i));
+                        }
                     }
                 }
             }
@@ -237,13 +246,22 @@ impl App {
             }
             AppMode::Details => {
                 if let Some(proj_idx) = self.selected_project_idx {
-                    let total_commits: usize = self.projects[proj_idx].branches.iter().map(|b| b.commits.len()).sum();
-                    if total_commits > 0 {
-                        let i = match self.commit_list_state.selected() {
-                            Some(i) => if i == 0 { total_commits.saturating_sub(1) } else { i - 1 },
-                            None => 0,
-                        };
-                        self.commit_list_state.select(Some(i));
+                    if proj_idx < self.projects.len() {
+                        let mut total_rendered = 0;
+                        if !self.projects[proj_idx].branches.is_empty() {
+                            total_rendered += 1; // Project header
+                        }
+                        for b in &self.projects[proj_idx].branches {
+                            total_rendered += 1; // Branch header
+                            total_rendered += b.commits.len();
+                        }
+                        if total_rendered > 0 {
+                            let i = match self.commit_list_state.selected() {
+                                Some(i) => if i == 0 { total_rendered.saturating_sub(1) } else { i - 1 },
+                                None => 0,
+                            };
+                            self.commit_list_state.select(Some(i));
+                        }
                     }
                 }
             }
@@ -262,14 +280,15 @@ impl App {
     }
 
     pub fn enter_details(&mut self) {
-        if self.selected_project_idx.is_some()
-            && let Some(proj_idx) = self.selected_project_idx {
+        if let Some(proj_idx) = self.selected_project_idx {
+            if proj_idx < self.projects.len() {
                 let total_commits: usize = self.projects[proj_idx].branches.iter().map(|b| b.commits.len()).sum();
                 if total_commits > 0 {
                     self.mode = AppMode::Details;
                     self.commit_list_state.select(Some(0));
                 }
             }
+        }
     }
 
     pub fn leave_details(&mut self) {

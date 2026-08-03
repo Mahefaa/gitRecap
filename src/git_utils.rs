@@ -18,15 +18,27 @@ pub struct BranchCommits {
 
 pub fn find_git_repos(base_path: &Path) -> Vec<PathBuf> {
     let mut repos = Vec::new();
-    let walker = WalkDir::new(base_path).into_iter().filter_entry(|e| {
-        e.file_name() == ".git" || !e.file_name().to_string_lossy().starts_with('.')
-    });
-
-    for entry in walker.filter_map(|e| e.ok()) {
-        if entry.file_name() == ".git" && entry.file_type().is_dir()
-            && let Some(parent) = entry.path().parent() {
+    let mut it = WalkDir::new(base_path).into_iter();
+    
+    loop {
+        let entry = match it.next() {
+            None => break,
+            Some(Err(_)) => continue,
+            Some(Ok(entry)) => entry,
+        };
+        
+        let name = entry.file_name().to_string_lossy();
+        
+        if name == ".git" && entry.file_type().is_dir() {
+            if let Some(parent) = entry.path().parent() {
                 repos.push(parent.to_path_buf());
             }
+            it.skip_current_dir();
+        } else if entry.file_type().is_dir() {
+            if name.starts_with('.') || name == "node_modules" || name == "target" || name == "vendor" || name == "build" || name == "dist" {
+                it.skip_current_dir();
+            }
+        }
     }
     repos
 }
