@@ -77,9 +77,21 @@ impl App {
     }
 
     pub fn add_source(&mut self, path: PathBuf) {
+        let mut updated = false;
         if !self.sources.contains(&path) {
             self.sources.push(path.clone());
             self.current_profile.sources = self.sources.clone();
+            updated = true;
+        }
+
+        let original_len = self.current_profile.removed_projects.len();
+        self.current_profile.removed_projects.retain(|p| !p.starts_with(&path));
+        
+        if self.current_profile.removed_projects.len() < original_len {
+            updated = true;
+        }
+
+        if updated {
             self.config.update_active_profile(self.current_profile.clone());
             self.scan_sources();
             self.reload_data();
