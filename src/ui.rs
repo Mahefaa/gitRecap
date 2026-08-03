@@ -403,9 +403,9 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                 }
 
                 let push_status = if commit.is_pushed {
-                    Span::styled("[Pushed] ", Style::default().fg(Color::Green))
+                    Span::raw("")
                 } else {
-                    Span::styled("[Unpushed] ", Style::default().fg(Color::Red))
+                    Span::styled("* ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
                 };
                 
                 let line = Line::from(vec![
