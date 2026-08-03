@@ -17,7 +17,7 @@ use tui_input::backend::crossterm::EventHandler;
 fn main() -> Result<(), Box<dyn Error>> {
     enable_raw_mode()?;
     let stdout = io::stdout();
-    let mut stdout = BufWriter::new(stdout);
+    let mut stdout = BufWriter::with_capacity(1024 * 1024, stdout);
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     disable_raw_mode()?;
     let stdout = io::stdout();
-    let mut stdout = BufWriter::new(stdout);
+    let mut stdout = BufWriter::with_capacity(1024 * 1024, stdout);
     execute!(
         stdout,
         LeaveAlternateScreen,
