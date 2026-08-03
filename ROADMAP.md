@@ -22,7 +22,7 @@ It ensures we do not lose track of the ambitious goals set for this project.
 - [x] `:fetch all`: Run a background job to sync all known repositories.
 
 ## 🌟 Game-Changing Features
-1. **Commit Diff Viewer (Split Screen)**
+1. **Commit Diff Viewer (Split Screen)** (Completed)
    - Pressing `Enter` on a commit opens a syntax-highlighted diff (via `git show`) in a bottom split pane.
 2. **Interactive Commit Editing** (Completed)
    - Press `E` on an unpushed commit to open `$EDITOR` and seamlessly run `git commit --amend` to rewrite history.

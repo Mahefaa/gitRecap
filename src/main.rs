@@ -128,9 +128,34 @@ fn run_app(
                             app.leave_details();
                         },
                         KeyCode::Char('q') => app.quit(),
-                        KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left => app.leave_details(),
-                        KeyCode::Char('j') | KeyCode::Down => app.next_item(),
-                        KeyCode::Char('k') | KeyCode::Up => app.previous_item(),
+                        KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left => {
+                            if app.diff_content.is_some() {
+                                app.diff_content = None;
+                            } else {
+                                app.leave_details();
+                            }
+                        }
+                        KeyCode::Char('j') | KeyCode::Down => {
+                            app.next_item();
+                            if app.diff_content.is_some() {
+                                app.show_diff_for_selected();
+                            }
+                        }
+                        KeyCode::Char('k') | KeyCode::Up => {
+                            app.previous_item();
+                            if app.diff_content.is_some() {
+                                app.show_diff_for_selected();
+                            }
+                        }
+                        KeyCode::Enter | KeyCode::Char('l') => {
+                            app.show_diff_for_selected();
+                        }
+                        KeyCode::PageDown => {
+                            app.diff_scroll = app.diff_scroll.saturating_add(5);
+                        }
+                        KeyCode::PageUp => {
+                            app.diff_scroll = app.diff_scroll.saturating_sub(5);
+                        }
                         KeyCode::Char('e') => {
                             if let Err(e) = app.export_summary("summary.txt") {
                                 app.flash_message = Some(format!("Export failed: {}", e));
@@ -146,7 +171,7 @@ fn run_app(
                         KeyCode::Char('E') => {
                             if let Some(idx) = app.commit_list_state.selected() {
                                 if idx < app.commit_list_map.len() {
-                                    let (proj_idx, _, _) = app.commit_list_map[idx];
+                                    let (proj_idx, _, _, _) = app.commit_list_map[idx];
                                     if proj_idx < app.projects.len() {
                                         let proj_path = app.projects[proj_idx].path.clone();
                                         

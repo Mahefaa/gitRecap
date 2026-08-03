@@ -7,7 +7,7 @@ Welcome to **gitRecap**! This is your ultimate guide to using the application, c
 - `k` / `Up Arrow`: Move cursor up.
 - `g`: Jump to the top of the list.
 - `G`: Jump to the bottom of the list.
-- `Space`: Toggle a project on/off (excludes it from the right-hand commit view without removing it).
+- `Space`: Toggle a project on/off (excludes it from the right-hand view).
 - `s`: Toggle all projects on/off simultaneously.
 - `c`: Expand/Collapse the currently selected node (works on projects, dates, or branches).
 - `Enter` / `l` / `Right Arrow`: Enter the Details view (jump your cursor to the right-side panel).
@@ -56,6 +56,16 @@ Profiles allow you to maintain entirely separate workspaces (e.g., "work" vs. "p
 - **Unpushed Commits Marker:** Any commit labeled with a red `*` next to it exists on your local machine but has **not yet been pushed** to your remote origin. This makes it incredibly easy to see which repositories need syncing!
 
 ---
+
+## 🔍 Commits View
+- `j/k`, `Up/Down`: Navigate through commits.
+- `l` or `Enter`: Toggle collapse on headers, or **Open the Split-Screen Diff Viewer** when selecting a commit!
+- `c`: Collapse/expand all headers in the Commits view globally.
+- `/`: Trigger the global Fuzzy Finder to search across all commits instantly.
+
+## 📝 Diff Viewer Mode
+- When the split-screen diff viewer is open (triggered by `Enter`), use `PageUp` and `PageDown` to instantly scroll through the syntax-highlighted Git Diff!
+- Press `Esc` or `h` to close the Diff Viewer and regain the full commit view screen space.
 
 ## ⌨️ Command Mode
 Press `:` to enter command mode (like Vim). Commands let you perform sweeping actions instantly:

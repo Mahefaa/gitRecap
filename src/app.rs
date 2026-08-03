@@ -62,7 +62,7 @@ pub struct App {
     pub fuzzy_list_state: ListState,
     pub projects_area: Option<Rect>,
     pub commits_area: Option<Rect>,
-    pub commit_list_map: Vec<(usize, Option<usize>, Option<usize>)>,
+    pub commit_list_map: Vec<(usize, Option<usize>, Option<usize>, Option<usize>)>,
     pub sources: Vec<PathBuf>,
     pub projects: Vec<ProjectData>,
     pub project_list_state: ListState,
@@ -80,6 +80,8 @@ pub struct App {
     pub is_loading: bool,
     pub loading_rx: Option<std::sync::mpsc::Receiver<LoadingResult>>,
     pub hide_zero_commits: bool,
+    pub diff_content: Option<Vec<u8>>,
+    pub diff_scroll: u16,
 }
 
 impl App {
@@ -113,6 +115,8 @@ impl App {
             is_loading: false,
             loading_rx: None,
             hide_zero_commits: false,
+            diff_content: None,
+            diff_scroll: 0,
         };
         app.current_profile = app.config.get_active_profile();
         app.sources = app.current_profile.sources.clone();
@@ -303,7 +307,7 @@ impl App {
     pub fn toggle_expand_from_commits_view(&mut self) {
         if let Some(selected_line) = self.commit_list_state.selected() {
             if selected_line < self.commit_list_map.len() {
-                let (proj_idx, date_idx, branch_idx) = self.commit_list_map[selected_line];
+                let (proj_idx, date_idx, branch_idx, _) = self.commit_list_map[selected_line];
                 if proj_idx < self.projects.len() {
                     if let Some(d_idx) = date_idx {
                         if let Some(b_idx) = branch_idx {
@@ -581,6 +585,38 @@ impl App {
         self.mode = AppMode::CommitsView;
         if self.commit_list_state.selected().is_none() {
             self.commit_list_state.select(Some(0));
+        }
+    }
+
+    pub fn show_diff_for_selected(&mut self) {
+        if let Some(idx) = self.commit_list_state.selected() {
+            if idx < self.commit_list_map.len() {
+                let (proj_idx, d_idx, b_idx, c_idx) = self.commit_list_map[idx];
+                if let (Some(d), Some(b), Some(c)) = (d_idx, b_idx, c_idx) {
+                    if proj_idx < self.projects.len() {
+                        if d < self.projects[proj_idx].dates.len() {
+                            if b < self.projects[proj_idx].dates[d].branches.len() {
+                                if c < self.projects[proj_idx].dates[d].branches[b].commits.len() {
+                                    let commit_id = &self.projects[proj_idx].dates[d].branches[b].commits[c].id;
+                                    let proj_path = &self.projects[proj_idx].path;
+                                    
+                                    if let Ok(output) = std::process::Command::new("git")
+                                        .arg("show")
+                                        .arg("--color=always")
+                                        .arg(commit_id)
+                                        .current_dir(proj_path)
+                                        .output() {
+                                            self.diff_content = Some(output.stdout);
+                                            self.diff_scroll = 0;
+                                        }
+                                }
+                            }
+                        }
+                    }
+                } else if c_idx.is_none() {
+                    self.diff_content = None;
+                }
+            }
         }
     }
 

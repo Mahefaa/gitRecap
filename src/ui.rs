@@ -227,7 +227,25 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             app.commits_area = Some(main_chunks[1]);
                 
             render_projects_list(f, app, main_chunks[0]);
-            render_commits_list(f, app, main_chunks[1]);
+            
+            if let Some(diff) = app.diff_content.clone() {
+                let commit_chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                    .split(main_chunks[1]);
+                
+                render_commits_list(f, app, commit_chunks[0]);
+                
+                use ansi_to_tui::IntoText;
+                let text = diff.into_text().unwrap_or_else(|_| ratatui::text::Text::raw("Failed to parse diff"));
+                
+                let diff_block = Block::default().title("Diff Viewer (PgUp/PgDown to scroll)").borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan));
+                
+                let p = Paragraph::new(text).block(diff_block).scroll((app.diff_scroll, 0));
+                f.render_widget(p, commit_chunks[1]);
+            } else {
+                render_commits_list(f, app, main_chunks[1]);
+            }
             
             let help_text = match app.mode {
                 AppMode::Normal | AppMode::ConfirmQuit | AppMode::Help => "?: Help Modal | q: Quit | j/k: Nav | g/G: Top/Bot | Space: Toggle | c: Collapse | :cmd | P: Profile | p: Explorer | u: Push | R: Refresh",
@@ -264,7 +282,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
     if let AppMode::ConfirmQuit = app.mode {
         let block = Block::default().borders(Borders::ALL).title("Confirm Quit").border_style(Style::default().fg(Color::Red));
-        let area = centered_rect(30, 20, chunks[1]);
+        let area = centered_rect(30, 20, f.area());
         f.render_widget(ratatui::widgets::Clear, area);
         f.render_widget(
             Paragraph::new("Are you sure you want to quit? [y/N]")
@@ -470,14 +488,14 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
             items.push(ListItem::new(Line::from(vec![
                 Span::styled(format!("{} (collapsed)", proj.name), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
             ])));
-            app.commit_list_map.push((proj_idx, None, None));
+            app.commit_list_map.push((proj_idx, None, None, None));
             continue;
         }
 
         items.push(ListItem::new(Line::from(vec![
             Span::styled(format!("{} ", proj.name), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
         ])));
-        app.commit_list_map.push((proj_idx, None, None));
+        app.commit_list_map.push((proj_idx, None, None, None));
         
         for (date_idx, date_group) in proj.dates.iter().enumerate() {
             if commit_count >= LIMIT { break; }
@@ -486,7 +504,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                     Span::raw("  "),
                     Span::styled(format!("{} (collapsed)", date_group.date), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
                 ])));
-                app.commit_list_map.push((proj_idx, Some(date_idx), None));
+                app.commit_list_map.push((proj_idx, Some(date_idx), None, None));
                 continue;
             }
             
@@ -494,7 +512,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                 Span::raw("  "),
                 Span::styled(format!("{} ", date_group.date), Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
             ])));
-            app.commit_list_map.push((proj_idx, Some(date_idx), None));
+            app.commit_list_map.push((proj_idx, Some(date_idx), None, None));
             
             for (branch_idx, branch_group) in date_group.branches.iter().enumerate() {
                 if commit_count >= LIMIT { break; }
@@ -503,7 +521,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                         Span::raw("    "),
                         Span::styled(format!("{} (collapsed)", branch_group.name), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
                     ])));
-                    app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx)));
+                    app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx), None));
                     continue;
                 }
                 
@@ -512,10 +530,10 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                         Span::raw("    "),
                         Span::styled(format!("{} ", branch_group.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
                     ])));
-                    app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx)));
+                    app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx), None));
                 }
                 
-                for commit in &branch_group.commits {
+                for (commit_idx, commit) in branch_group.commits.iter().enumerate() {
 
 
                     if commit_count >= LIMIT { break; }
@@ -535,7 +553,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                         Span::raw(format!("{}", commit.message)),
                     ]);
                     items.push(ListItem::new(vec![line]));
-                    app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx)));
+                    app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx), Some(commit_idx)));
                     commit_count += 1;
                 }
             }
@@ -547,7 +565,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
         items.push(ListItem::new(Line::from(vec![
             Span::styled(format!("... and {} more commits (export to see all)", hidden), Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
         ])));
-        app.commit_list_map.push((usize::MAX, None, None));
+        app.commit_list_map.push((usize::MAX, None, None, None));
     }
 
     let title = if app.is_loading { "Commits [LOADING...]" } else { "Commits" };
