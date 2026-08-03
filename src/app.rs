@@ -175,35 +175,38 @@ impl App {
         std::thread::spawn(move || {
             let mut authors_set = std::collections::HashSet::new();
 
-            for base_path in &sources {
-                if !base_path.exists() { continue; }
-                let repos = crate::git_utils::find_git_repos(base_path);
-                for repo_path in repos {
-                    if existing_paths.contains(&repo_path) { continue; }
-                    let is_removed = removed_projects.contains(&repo_path);
-                    if !is_removed {
-                        let name = repo_path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                        let enabled = !disabled_projects.contains(&repo_path);
-                        
-                        let mut dates = Vec::new();
-                        if enabled {
-                            if let Ok(b) = crate::git_utils::get_commits(&repo_path, &author_filter, &branch_filter, start_date, end_date) {
-                                dates = b;
-                            }
-                        }
+            let repos: Vec<_> = sources.iter()
+                .filter(|p| p.exists())
+                .flat_map(|p| crate::git_utils::find_git_repos(p))
+                .filter(|p| !existing_paths.contains(p) && !removed_projects.contains(p))
+                .collect();
 
-                        let _ = tx.send(LoadingResult::ProjectScanned(ProjectData {
-                            name,
-                            path: repo_path.clone(),
-                            enabled,
-                            dates,
-                            is_expanded: true,
-                        }));
-                        
-                        for author in crate::git_utils::get_recent_authors(&repo_path) {
-                            authors_set.insert(author);
-                        }
+            use rayon::prelude::*;
+            let authors_results: Vec<Vec<String>> = repos.into_par_iter().map(|repo_path| {
+                let name = repo_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let enabled = !disabled_projects.contains(&repo_path);
+                
+                let mut dates = Vec::new();
+                if enabled {
+                    if let Ok(b) = crate::git_utils::get_commits(&repo_path, &author_filter, &branch_filter, start_date, end_date) {
+                        dates = b;
                     }
+                }
+
+                let _ = tx.send(LoadingResult::ProjectScanned(ProjectData {
+                    name,
+                    path: repo_path.clone(),
+                    enabled,
+                    dates,
+                    is_expanded: true,
+                }));
+                
+                crate::git_utils::get_recent_authors(&repo_path)
+            }).collect();
+
+            for set in authors_results {
+                for author in set {
+                    authors_set.insert(author);
                 }
             }
             
@@ -225,14 +228,15 @@ impl App {
         self.loading_rx = Some(rx);
 
         std::thread::spawn(move || {
-            for proj in &mut projects {
+            use rayon::prelude::*;
+            projects.par_iter_mut().for_each(|proj| {
                 proj.dates.clear();
                 if proj.enabled {
                     if let Ok(dates) = crate::git_utils::get_commits(&proj.path, &author_filter, &branch_filter, start_date, end_date) {
                         proj.dates = dates;
                     }
                 }
-            }
+            });
             let _ = tx.send(LoadingResult::ReloadComplete(projects));
         });
     }
