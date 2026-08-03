@@ -118,7 +118,7 @@ fn run_app(
                         }
                     }
                 },
-                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::InputCommitSearch => {
+                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch => {
                     match key.code {
                         KeyCode::Enter => app.submit_input(),
                         KeyCode::Esc => app.cancel_input(),
@@ -127,16 +127,26 @@ fn run_app(
                         }
                     }
                 },
+                AppMode::InputCommitSearch => {
+                    match key.code {
+                        KeyCode::Enter | KeyCode::Esc => {
+                            app.mode = AppMode::CommitsView;
+                        },
+                        _ => {
+                            app.input.handle_event(&Event::Key(key));
+                            app.commit_search = app.input.value().to_string();
+                        }
+                    }
+                },
                 AppMode::FileExplorer => {
                     if app.file_explorer.is_searching {
                         match key.code {
                             KeyCode::Enter | KeyCode::Esc => {
                                 app.file_explorer.is_searching = false;
-                                app.file_explorer.load_directory();
                             },
                             _ => {
                                 app.file_explorer.search_input.handle_event(&Event::Key(key));
-                                app.file_explorer.load_directory();
+                                app.file_explorer.apply_filter();
                             }
                         }
                     } else {

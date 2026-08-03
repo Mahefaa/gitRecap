@@ -15,6 +15,7 @@ pub struct FileEntry {
 
 pub struct FileExplorerState {
     pub current_path: PathBuf,
+    pub all_entries: Vec<FileEntry>,
     pub entries: Vec<FileEntry>,
     pub list_state: ListState,
     pub search_input: Input,
@@ -27,6 +28,7 @@ impl FileExplorerState {
     pub fn new(start_path: PathBuf) -> Self {
         let mut fe = FileExplorerState {
             current_path: start_path,
+            all_entries: Vec::new(),
             entries: Vec::new(),
             list_state: ListState::default(),
             search_input: Input::default(),
@@ -39,20 +41,17 @@ impl FileExplorerState {
     }
 
     pub fn load_directory(&mut self) {
-        self.entries.clear();
+        self.all_entries.clear();
         
-        let search_term = self.search_input.value().to_lowercase();
-
-        if let Some(parent) = self.current_path.parent()
-            && search_term.is_empty() {
-                self.entries.push(FileEntry {
-                    path: parent.to_path_buf(),
-                    name: "..".to_string(),
-                    is_dir: true,
-                    is_git_repo: false,
-                    git_info: None,
-                });
-            }
+        if let Some(parent) = self.current_path.parent() {
+            self.all_entries.push(FileEntry {
+                path: parent.to_path_buf(),
+                name: "..".to_string(),
+                is_dir: true,
+                is_git_repo: false,
+                git_info: None,
+            });
+        }
 
         if let Ok(read_dir) = fs::read_dir(&self.current_path) {
             for entry in read_dir.flatten() {
@@ -64,10 +63,6 @@ impl FileExplorerState {
                     continue;
                 }
                 
-                if !search_term.is_empty() && !name.to_lowercase().contains(&search_term) {
-                    continue;
-                }
-
                 let mut is_git_repo = false;
                 let mut git_info = None;
                 if is_dir {
@@ -77,7 +72,7 @@ impl FileExplorerState {
                     }
                 }
 
-                self.entries.push(FileEntry {
+                self.all_entries.push(FileEntry {
                     path,
                     name,
                     is_dir,
@@ -87,12 +82,29 @@ impl FileExplorerState {
             }
         }
         
-        self.entries.sort_by(|a, b| {
+        self.all_entries.sort_by(|a, b| {
             if a.name == ".." { return std::cmp::Ordering::Less; }
             if b.name == ".." { return std::cmp::Ordering::Greater; }
             
             b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name))
         });
+        
+        self.apply_filter();
+    }
+
+    pub fn apply_filter(&mut self) {
+        self.entries.clear();
+        let search_term = self.search_input.value().to_lowercase();
+        
+        for entry in &self.all_entries {
+            if entry.name == ".." && !search_term.is_empty() {
+                continue;
+            }
+            if !search_term.is_empty() && !entry.name.to_lowercase().contains(&search_term) {
+                continue;
+            }
+            self.entries.push(entry.clone());
+        }
 
         if !self.entries.is_empty() {
             self.list_state.select(Some(0));

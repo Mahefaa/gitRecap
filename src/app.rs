@@ -521,11 +521,6 @@ impl App {
                 self.branch_filter = self.input.value().to_string();
                 self.reload_data();
             }
-            AppMode::InputCommitSearch => {
-                self.commit_search = self.input.value().to_lowercase();
-                self.mode = AppMode::CommitsView;
-                return;
-            }
             AppMode::InputProfile => {
                 let name = self.input.value().to_string();
                 if !name.is_empty() {
