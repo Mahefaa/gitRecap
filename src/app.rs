@@ -21,7 +21,8 @@ pub enum AppMode {
 }
 
 pub enum LoadingResult {
-    ScanComplete(Vec<ProjectData>, Vec<String>),
+    ProjectScanned(ProjectData),
+    ScanComplete(Vec<String>),
     ReloadComplete(Vec<ProjectData>),
 }
 
@@ -31,6 +32,7 @@ pub struct ProjectData {
     pub path: PathBuf,
     pub enabled: bool,
     pub branches: Vec<BranchCommits>,
+    pub is_expanded: bool,
 }
 
 pub struct App {
@@ -87,22 +89,29 @@ impl App {
 
     pub fn check_background_tasks(&mut self) {
         if let Some(rx) = &self.loading_rx {
-            if let Ok(result) = rx.try_recv() {
+            while let Ok(result) = rx.try_recv() {
                 match result {
-                    LoadingResult::ScanComplete(new_projects, authors) => {
-                        self.projects = new_projects;
-                        self.known_authors = authors;
-                        if !self.projects.is_empty() && self.selected_project_idx.is_none() {
+                    LoadingResult::ProjectScanned(proj) => {
+                        self.projects.push(proj);
+                        if self.projects.len() == 1 && self.selected_project_idx.is_none() {
                             self.project_list_state.select(Some(0));
                             self.selected_project_idx = Some(0);
                         }
                     }
+                    LoadingResult::ScanComplete(authors) => {
+                        self.known_authors = authors;
+                        self.projects.sort_by(|a, b| a.name.cmp(&b.name));
+                        self.is_loading = false;
+                        self.loading_rx = None;
+                        break;
+                    }
                     LoadingResult::ReloadComplete(updated_projects) => {
                         self.projects = updated_projects;
+                        self.is_loading = false;
+                        self.loading_rx = None;
+                        break;
                     }
                 }
-                self.is_loading = false;
-                self.loading_rx = None;
             }
         }
     }
@@ -136,19 +145,20 @@ impl App {
         let author_filter = self.author_filter.clone();
         let start_date = self.date_start_filter;
         let end_date = self.date_end_filter;
+        let existing_paths: std::collections::HashSet<_> = self.projects.iter().map(|p| p.path.clone()).collect();
 
         let (tx, rx) = std::sync::mpsc::channel();
         self.is_loading = true;
         self.loading_rx = Some(rx);
 
         std::thread::spawn(move || {
-            let mut new_projects = Vec::new();
             let mut authors_set = std::collections::HashSet::new();
 
             for base_path in &sources {
                 if !base_path.exists() { continue; }
                 let repos = crate::git_utils::find_git_repos(base_path);
                 for repo_path in repos {
+                    if existing_paths.contains(&repo_path) { continue; }
                     let is_removed = removed_projects.contains(&repo_path);
                     if !is_removed {
                         let name = repo_path.file_name().unwrap_or_default().to_string_lossy().to_string();
@@ -164,12 +174,13 @@ impl App {
                             }
                         }
 
-                        new_projects.push(ProjectData {
+                        let _ = tx.send(LoadingResult::ProjectScanned(ProjectData {
                             name,
                             path: repo_path.clone(),
                             enabled,
                             branches,
-                        });
+                            is_expanded: true,
+                        }));
                         
                         for author in crate::git_utils::get_recent_authors(&repo_path) {
                             authors_set.insert(author);
@@ -180,7 +191,7 @@ impl App {
             
             let mut sorted_authors: Vec<String> = authors_set.into_iter().collect();
             sorted_authors.sort();
-            let _ = tx.send(LoadingResult::ScanComplete(new_projects, sorted_authors));
+            let _ = tx.send(LoadingResult::ScanComplete(sorted_authors));
         });
     }
 
@@ -228,6 +239,14 @@ impl App {
                 
                 self.reload_data();
             }
+    }
+
+    pub fn toggle_expand(&mut self) {
+        if let Some(idx) = self.selected_project_idx {
+            if idx < self.projects.len() {
+                self.projects[idx].is_expanded = !self.projects[idx].is_expanded;
+            }
+        }
     }
 
     pub fn remove_project(&mut self) {

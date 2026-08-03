@@ -6,7 +6,7 @@ mod ui;
 
 use app::{App, AppMode};
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -49,6 +49,9 @@ fn run_app(
 
         if event::poll(std::time::Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
+                if key.kind != KeyEventKind::Press {
+                    continue;
+                }
                 match app.mode {
                 AppMode::Normal => match key.code {
                     KeyCode::Char('q') => app.quit(),
@@ -60,6 +63,8 @@ fn run_app(
                     KeyCode::Char('p') => app.enter_input_mode(AppMode::FileExplorer),
                     KeyCode::Char('P') => app.enter_input_mode(AppMode::InputProfile),
                     KeyCode::Char(' ') => app.toggle_project(),
+                    KeyCode::Char('c') => app.toggle_expand(),
+                    KeyCode::Char('R') => app.reload_data(),
                     KeyCode::Char('r') | KeyCode::Delete => app.remove_project(),
                     KeyCode::Char('u') => app.mode = AppMode::ConfirmPush { force: false },
                     KeyCode::Char('U') => app.mode = AppMode::ConfirmPush { force: true },
