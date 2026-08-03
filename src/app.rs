@@ -447,7 +447,8 @@ impl App {
                 }
             }
             AppMode::InputAddSource => {
-                let p = PathBuf::from(self.input.value().trim());
+                let raw_path = self.input.value().trim().replace("\\", "/");
+                let p = PathBuf::from(raw_path);
                 if p.exists() && p.is_dir() {
                     self.add_source(p);
                     self.flash_message = Some("Source path added!".to_string());
@@ -456,7 +457,8 @@ impl App {
                 }
             }
             AppMode::ExplorerJumpPath => {
-                let p = PathBuf::from(self.input.value().trim());
+                let raw_path = self.input.value().trim().replace("\\", "/");
+                let p = PathBuf::from(raw_path);
                 if p.exists() && p.is_dir() {
                     self.file_explorer.current_path = p;
                     self.file_explorer.load_directory();
