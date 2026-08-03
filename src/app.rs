@@ -1,8 +1,7 @@
-use crate::git_utils::{self, DateGroup};
-use chrono::{Local, NaiveDate, TimeZone, Datelike};
+use crate::git_utils::DateGroup;
+use chrono::{Local, NaiveDate, Datelike};
 use ratatui::widgets::ListState;
 use ratatui::layout::Rect;
-use std::collections::HashSet;
 use std::error::Error;
 use std::path::PathBuf;
 use tui_input::Input;
