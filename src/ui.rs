@@ -355,14 +355,14 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
         
         if !proj.is_expanded {
             items.push(ListItem::new(Line::from(vec![
-                Span::styled(format!("Project: {} (Collapsed)", proj.name), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{} (Collapsed)", proj.name), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
             ])));
             app.commit_list_project_map.push(proj_idx);
             continue;
         }
 
         items.push(ListItem::new(Line::from(vec![
-            Span::styled(format!("Project: {} ", proj.name), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{} ", proj.name), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
         ])));
         app.commit_list_project_map.push(proj_idx);
         
@@ -373,13 +373,12 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
             if !branch.commits.is_empty() {
                 items.push(ListItem::new(Line::from(vec![
                     Span::raw("  "),
-                    Span::styled(format!("Branch: {} ", branch.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("{} ", branch.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
                 ])));
                 app.commit_list_project_map.push(proj_idx);
             }
             
             let mut last_date = String::new();
-            let mut last_author = String::new();
             
             for commit in &branch.commits {
                 if !app.commit_search.is_empty() {
@@ -397,23 +396,12 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                 if current_date != last_date {
                     items.push(ListItem::new(Line::from(vec![
                         Span::raw("    "),
-                        Span::styled(format!("Date: {} ", current_date), Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("{} ", current_date), Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
                     ])));
                     app.commit_list_project_map.push(proj_idx);
                     last_date = current_date;
-                    last_author = String::new();
                 }
 
-                let current_author = &commit.author;
-                if current_author != &last_author {
-                    items.push(ListItem::new(Line::from(vec![
-                        Span::raw("      "),
-                        Span::styled(format!("Author: {} ", current_author), Style::default().fg(Color::LightCyan).add_modifier(Modifier::BOLD)),
-                    ])));
-                    app.commit_list_project_map.push(proj_idx);
-                    last_author = current_author.clone();
-                }
-                
                 let push_status = if commit.is_pushed {
                     Span::styled("[Pushed] ", Style::default().fg(Color::Green))
                 } else {
@@ -421,11 +409,12 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                 };
                 
                 let line = Line::from(vec![
-                    Span::raw("        "),
+                    Span::raw("      "),
                     push_status,
                     Span::raw(format!("{} ", commit.id.chars().take(7).collect::<String>())),
                     Span::styled(format!("{} ", commit.date.format("%H:%M")), Style::default().fg(Color::Blue)),
-                    Span::raw(format!(" {}", commit.message)),
+                    Span::styled(format!("[{}] ", commit.author), Style::default().fg(Color::LightCyan)),
+                    Span::raw(format!("{}", commit.message)),
                 ]);
                 items.push(ListItem::new(vec![line]));
                 app.commit_list_project_map.push(proj_idx);
