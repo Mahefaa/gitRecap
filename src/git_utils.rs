@@ -89,14 +89,15 @@ pub fn get_commits(
                     
                     for oid in revwalk.filter_map(|id| id.ok()) {
                         if let Ok(commit) = repo.find_commit(oid) {
-                            let commit_time = commit.time().seconds();
+                            let committer_time = commit.time().seconds();
+                            let author_time = commit.author().when().seconds();
                             
-                            if commit_time < start_ts
-                                && (start_ts - commit_time) > 7 * 24 * 3600 {
+                            if committer_time < start_ts
+                                && (start_ts - committer_time) > 7 * 24 * 3600 {
                                     break;
                                 }
                             
-                            if commit_time >= start_ts && commit_time <= end_ts {
+                            if author_time >= start_ts && author_time <= end_ts {
                                 let author = commit.author();
                                 let author_str = author.name().unwrap_or("").to_lowercase();
                                 let filter_author = author_name.to_lowercase();
@@ -107,7 +108,7 @@ pub fn get_commits(
                                     let msg_str = String::from_utf8_lossy(msg_bytes);
                                     let summary = msg_str.lines().next().unwrap_or("").to_string();
                                     
-                                    let local_time = chrono::DateTime::from_timestamp(commit_time, 0).unwrap_or_default().into();
+                                    let local_time = chrono::DateTime::from_timestamp(author_time, 0).unwrap_or_default().into();
                                     
                                     commits.push(GitCommit {
                                         id: oid.to_string(),
@@ -154,7 +155,7 @@ pub fn get_last_commit_info(repo_path: &Path) -> Option<String> {
     let branch_name = head.shorthand().unwrap_or("unknown");
     
     let commit = head.peel_to_commit().ok()?;
-    let commit_time = commit.time().seconds();
+    let commit_time = commit.author().when().seconds();
     let local_time = chrono::DateTime::from_timestamp(commit_time, 0).unwrap_or_default();
     let local_date = chrono::DateTime::<Local>::from(local_time).format("%Y-%m-%d").to_string();
     
