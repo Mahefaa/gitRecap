@@ -104,6 +104,9 @@ fn run_app(
                     KeyCode::Char('e') => {
                         let _ = app.export_summary("summary.txt");
                     }
+                    KeyCode::Char('v') => {
+                        app.mode = AppMode::Dashboard;
+                    }
                     KeyCode::Char(':') => app.enter_input_mode(AppMode::Command),
                     KeyCode::Char('G') => {
                         let last = app.projects.len().saturating_sub(1);
@@ -227,12 +230,14 @@ fn run_app(
                         }
                     }
                 },
-                AppMode::ConfirmQuit => {
-                    match key.code {
-                        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => app.should_quit = true,
-                        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => app.mode = AppMode::Normal,
-                        _ => {}
-                    }
+                AppMode::ConfirmQuit => match key.code {
+                    KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => app.should_quit = true,
+                    KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => app.mode = AppMode::Normal,
+                    _ => {}
+                },
+                AppMode::Dashboard => match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('v') => app.mode = AppMode::Normal,
+                    _ => {}
                 },
                 AppMode::Help => {
                     match key.code {

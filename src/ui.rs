@@ -278,6 +278,59 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             let p = Paragraph::new(msg).block(block).alignment(ratatui::layout::Alignment::Center);
             f.render_widget(p, area);
         }
+        AppMode::Dashboard => {
+            let mut data: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+            let mut total_commits = 0;
+            let mut most_active_repo = String::from("None");
+            let mut max_repo_commits = 0;
+            
+            for proj in &app.projects {
+                if !proj.enabled { continue; }
+                let mut repo_commits = 0;
+                for d in &proj.dates {
+                    let count: usize = d.branches.iter().map(|b| b.commits.len()).sum();
+                    *data.entry(d.date.clone()).or_insert(0) += count as u64;
+                    repo_commits += count;
+                }
+                total_commits += repo_commits;
+                if repo_commits > max_repo_commits {
+                    max_repo_commits = repo_commits;
+                    most_active_repo = proj.name.clone();
+                }
+            }
+            
+            let mut sorted_data: Vec<(String, u64)> = data.into_iter().collect();
+            sorted_data.sort_by(|a, b| a.0.cmp(&b.0));
+            let display_data: Vec<(&str, u64)> = sorted_data.iter().rev().take(15).rev().map(|(k, v)| (k.as_str(), *v)).collect();
+            
+            let dashboard_layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(5), Constraint::Min(0)].as_ref())
+                .split(chunks[1]);
+                
+            let stats_text = vec![
+                Line::from(Span::styled(format!("Total Commits in View: {}", total_commits), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+                Line::from(Span::styled(format!("Most Active Repository: {} ({} commits)", most_active_repo, max_repo_commits), Style::default().fg(Color::Magenta))),
+                Line::from(Span::styled("This dashboard visualizes your Git activity across all enabled projects over time.", Style::default().fg(Color::DarkGray))),
+            ];
+            
+            let stats_block = Paragraph::new(stats_text)
+                .block(Block::default().borders(Borders::ALL).title("Insights").border_style(Style::default().fg(Color::Green)))
+                .alignment(ratatui::layout::Alignment::Center);
+                
+            f.render_widget(stats_block, dashboard_layout[0]);
+            
+            let barchart = ratatui::widgets::BarChart::default()
+                .block(Block::default().title("Activity Dashboard (Press 'Esc' or 'v' to exit)").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)))
+                .data(&display_data)
+                .bar_width(12)
+                .bar_gap(2)
+                .value_style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD))
+                .label_style(Style::default().fg(Color::Cyan))
+                .bar_style(Style::default().fg(Color::Green));
+                
+            f.render_widget(barchart, dashboard_layout[1]);
+        }
     }
 
     if let AppMode::ConfirmQuit = app.mode {

@@ -24,6 +24,7 @@ pub enum AppMode {
     Command,
     ConfirmQuit,
     Help,
+    Dashboard,
 }
 
 pub enum LoadingResult {

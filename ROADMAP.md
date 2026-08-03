@@ -28,5 +28,5 @@ It ensures we do not lose track of the ambitious goals set for this project.
    - Press `E` on an unpushed commit to open `$EDITOR` and seamlessly run `git commit --amend` to rewrite history.
 3. **Global Fuzzy Finder** (Completed)
    - Press `/` to trigger a global fuzzy search window (similar to `fzf`) across all projects, branches, and commits simultaneously.
-4. **Activity Dashboard**
+4. **Activity Dashboard** (Completed)
    - A dedicated `AppMode::Dashboard` featuring `ratatui` charts (heatmaps, bar charts) visualizing commit frequency and productivity over the selected timeline.

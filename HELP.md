@@ -12,6 +12,7 @@ Welcome to **gitRecap**! This is your ultimate guide to using the application, c
 - `c`: Expand/Collapse the currently selected node (works on projects, dates, or branches).
 - `Enter` / `l` / `Right Arrow`: Enter the Details view (jump your cursor to the right-side panel).
 - `Esc` / `h` / `Left Arrow`: Leave the Details view and return to the Projects list.
+- `v`: Open the **Activity Dashboard** (visualize your commit history in a BarChart).
 - `q`: Quit the application.
 
 ---
