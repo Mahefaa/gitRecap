@@ -51,6 +51,28 @@ pub fn get_commits(
 ) -> Result<Vec<BranchCommits>, git2::Error> {
     let repo = Repository::open(repo_path)?;
     let mut branch_commits = Vec::new();
+    let start_ts = start_date.timestamp();
+    let end_ts = end_date.timestamp();
+
+    let mut pushed_commits = std::collections::HashSet::new();
+    if let Ok(mut revwalk) = repo.revwalk() {
+        let _ = revwalk.set_sorting(git2::Sort::TIME);
+        if let Ok(branches) = repo.branches(Some(git2::BranchType::Remote)) {
+            for branch in branches.filter_map(|b| b.ok()) {
+                if let Some(target) = branch.0.get().target() {
+                    let _ = revwalk.push(target);
+                }
+            }
+        }
+        for oid in revwalk.filter_map(|id| id.ok()) {
+            if let Ok(commit) = repo.find_commit(oid) {
+                if commit.time().seconds() < start_ts - 14 * 24 * 3600 {
+                    break;
+                }
+                pushed_commits.insert(oid);
+            }
+        }
+    }
 
     if let Ok(local_branches) = repo.branches(Some(git2::BranchType::Local)) {
         for branch_res in local_branches.filter_map(|b| b.ok()) {
@@ -66,8 +88,6 @@ pub fn get_commits(
                     for oid in revwalk.filter_map(|id| id.ok()) {
                         if let Ok(commit) = repo.find_commit(oid) {
                             let commit_time = commit.time().seconds();
-                            let start_ts = start_date.timestamp();
-                            let end_ts = end_date.timestamp();
                             
                             if commit_time < start_ts
                                 && (start_ts - commit_time) > 7 * 24 * 3600 {
@@ -80,7 +100,7 @@ pub fn get_commits(
                                 let filter_author = author_name.to_lowercase();
                                 
                                 if filter_author.is_empty() || filter_author == "any" || author_str.contains(&filter_author) {
-                                    let is_pushed = is_commit_pushed(&repo, oid);
+                                    let is_pushed = pushed_commits.contains(&oid);
                                     let msg_bytes = commit.message_bytes();
                                     let msg_str = String::from_utf8_lossy(msg_bytes);
                                     let summary = msg_str.lines().next().unwrap_or("").to_string();
@@ -107,19 +127,6 @@ pub fn get_commits(
     }
 
     Ok(branch_commits)
-}
-
-fn is_commit_pushed(repo: &Repository, commit_id: git2::Oid) -> bool {
-    if let Ok(branches) = repo.branches(Some(git2::BranchType::Remote)) {
-        for branch in branches.filter_map(|b| b.ok()) {
-            if let Some(target) = branch.0.get().target()
-                && let Ok(base) = repo.merge_base(commit_id, target)
-                    && base == commit_id {
-                        return true;
-                    }
-        }
-    }
-    false
 }
 
 pub fn get_recent_authors(repo_path: &Path) -> Vec<String> {

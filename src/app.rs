@@ -212,12 +212,17 @@ impl App {
                 if let Some(proj_idx) = self.selected_project_idx {
                     if proj_idx < self.projects.len() {
                         let mut total_rendered = 0;
+                        const LIMIT: usize = 1000;
                         if !self.projects[proj_idx].branches.is_empty() {
-                            total_rendered += 1; // Project header
+                            total_rendered += 1;
                         }
                         for b in &self.projects[proj_idx].branches {
-                            total_rendered += 1; // Branch header
+                            if total_rendered >= LIMIT { break; }
+                            total_rendered += 1;
                             total_rendered += b.commits.len();
+                        }
+                        if total_rendered > LIMIT {
+                            total_rendered = LIMIT + 1;
                         }
                         if total_rendered > 0 {
                             let i = match self.commit_list_state.selected() {
@@ -260,12 +265,17 @@ impl App {
                 if let Some(proj_idx) = self.selected_project_idx {
                     if proj_idx < self.projects.len() {
                         let mut total_rendered = 0;
+                        const LIMIT: usize = 1000;
                         if !self.projects[proj_idx].branches.is_empty() {
-                            total_rendered += 1; // Project header
+                            total_rendered += 1;
                         }
                         for b in &self.projects[proj_idx].branches {
-                            total_rendered += 1; // Branch header
+                            if total_rendered >= LIMIT { break; }
+                            total_rendered += 1;
                             total_rendered += b.commits.len();
+                        }
+                        if total_rendered > LIMIT {
+                            total_rendered = LIMIT + 1;
                         }
                         if total_rendered > 0 {
                             let i = match self.commit_list_state.selected() {

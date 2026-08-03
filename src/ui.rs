@@ -288,21 +288,41 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
         }
     }
 
+    let mut commit_count = 0;
+    const LIMIT: usize = 1000;
+    let mut total_commits_in_view = 0;
+
     for proj in projects_to_show {
         if proj.branches.is_empty() {
             continue;
         }
+        
+        let proj_commits: usize = proj.branches.iter().map(|b| b.commits.len()).sum();
+        total_commits_in_view += proj_commits;
+        
+        if commit_count >= LIMIT {
+            continue; // Skip rendering more projects if we hit the limit
+        }
+        
         items.push(ListItem::new(Line::from(vec![
             Span::styled(format!("Project: {} ", proj.name), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
         ])));
         
         for branch in &proj.branches {
+            if commit_count >= LIMIT {
+                break;
+            }
+            
             items.push(ListItem::new(Line::from(vec![
                 Span::raw("  "),
                 Span::styled(format!("Branch: {} ", branch.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
             ])));
             
             for commit in &branch.commits {
+                if commit_count >= LIMIT {
+                    break;
+                }
+                
                 let push_status = if commit.is_pushed {
                     Span::styled("[Pushed] ", Style::default().fg(Color::Green))
                 } else {
@@ -318,8 +338,16 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                     Span::raw(&commit.message),
                 ]);
                 items.push(ListItem::new(vec![line]));
+                commit_count += 1;
             }
         }
+    }
+    
+    if total_commits_in_view > LIMIT {
+        let hidden = total_commits_in_view - LIMIT;
+        items.push(ListItem::new(Line::from(vec![
+            Span::styled(format!("... and {} more commits (export to see all)", hidden), Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+        ])));
     }
 
     let mut block = Block::default().borders(Borders::ALL).title("Commits");
