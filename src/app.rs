@@ -1,4 +1,4 @@
-use crate::git_utils::{self, BranchCommits};
+use crate::git_utils::{self, DateGroup};
 use chrono::{Local, NaiveDate, TimeZone, Datelike};
 use ratatui::widgets::ListState;
 use ratatui::layout::Rect;
@@ -22,6 +22,9 @@ pub enum AppMode {
     InputBranch,
     CommitsView,
     InputCommitSearch,
+    Command,
+    ConfirmQuit,
+    Help,
 }
 
 pub enum LoadingResult {
@@ -35,7 +38,7 @@ pub struct ProjectData {
     pub name: String,
     pub path: PathBuf,
     pub enabled: bool,
-    pub branches: Vec<BranchCommits>,
+    pub dates: Vec<DateGroup>,
     pub is_expanded: bool,
 }
 
@@ -47,7 +50,7 @@ pub struct App {
     pub commit_search: String,
     pub projects_area: Option<Rect>,
     pub commits_area: Option<Rect>,
-    pub commit_list_project_map: Vec<usize>,
+    pub commit_list_map: Vec<(usize, Option<usize>, Option<usize>)>,
     pub sources: Vec<PathBuf>,
     pub projects: Vec<ProjectData>,
     pub project_list_state: ListState,
@@ -64,6 +67,7 @@ pub struct App {
     pub flash_message: Option<String>,
     pub is_loading: bool,
     pub loading_rx: Option<std::sync::mpsc::Receiver<LoadingResult>>,
+    pub hide_zero_commits: bool,
 }
 
 impl App {
@@ -78,7 +82,7 @@ impl App {
             commit_search: String::new(),
             projects_area: None,
             commits_area: None,
-            commit_list_project_map: Vec::new(),
+            commit_list_map: Vec::new(),
             sources: vec![PathBuf::from(".")],
             projects: Vec::new(),
             project_list_state: ListState::default(),
@@ -95,6 +99,7 @@ impl App {
             flash_message: None,
             is_loading: false,
             loading_rx: None,
+            hide_zero_commits: false,
         };
         app.current_profile = app.config.get_active_profile();
         app.sources = app.current_profile.sources.clone();
@@ -180,13 +185,10 @@ impl App {
                         let name = repo_path.file_name().unwrap_or_default().to_string_lossy().to_string();
                         let enabled = !disabled_projects.contains(&repo_path);
                         
-                        let mut branches = Vec::new();
+                        let mut dates = Vec::new();
                         if enabled {
-                            if let Ok(mut b) = crate::git_utils::get_commits(&repo_path, &author_filter, &branch_filter, start_date, end_date) {
-                                for br in &mut b {
-                                    br.commits.sort_by_key(|c| std::cmp::Reverse(c.date));
-                                }
-                                branches = b;
+                            if let Ok(b) = crate::git_utils::get_commits(&repo_path, &author_filter, &branch_filter, start_date, end_date) {
+                                dates = b;
                             }
                         }
 
@@ -194,7 +196,7 @@ impl App {
                             name,
                             path: repo_path.clone(),
                             enabled,
-                            branches,
+                            dates,
                             is_expanded: true,
                         }));
                         
@@ -224,13 +226,10 @@ impl App {
 
         std::thread::spawn(move || {
             for proj in &mut projects {
-                proj.branches.clear();
+                proj.dates.clear();
                 if proj.enabled {
-                    if let Ok(mut branches) = crate::git_utils::get_commits(&proj.path, &author_filter, &branch_filter, start_date, end_date) {
-                        for b in &mut branches {
-                            b.commits.sort_by_key(|c| std::cmp::Reverse(c.date));
-                        }
-                        proj.branches = branches;
+                    if let Ok(dates) = crate::git_utils::get_commits(&proj.path, &author_filter, &branch_filter, start_date, end_date) {
+                        proj.dates = dates;
                     }
                 }
             }
@@ -268,10 +267,22 @@ impl App {
 
     pub fn toggle_expand_from_commits_view(&mut self) {
         if let Some(selected_line) = self.commit_list_state.selected() {
-            if selected_line < self.commit_list_project_map.len() {
-                let proj_idx = self.commit_list_project_map[selected_line];
+            if selected_line < self.commit_list_map.len() {
+                let (proj_idx, date_idx, branch_idx) = self.commit_list_map[selected_line];
                 if proj_idx < self.projects.len() {
-                    self.projects[proj_idx].is_expanded = !self.projects[proj_idx].is_expanded;
+                    if let Some(d_idx) = date_idx {
+                        if let Some(b_idx) = branch_idx {
+                            if d_idx < self.projects[proj_idx].dates.len() && b_idx < self.projects[proj_idx].dates[d_idx].branches.len() {
+                                self.projects[proj_idx].dates[d_idx].branches[b_idx].is_expanded = !self.projects[proj_idx].dates[d_idx].branches[b_idx].is_expanded;
+                            }
+                        } else {
+                            if d_idx < self.projects[proj_idx].dates.len() {
+                                self.projects[proj_idx].dates[d_idx].is_expanded = !self.projects[proj_idx].dates[d_idx].is_expanded;
+                            }
+                        }
+                    } else {
+                        self.projects[proj_idx].is_expanded = !self.projects[proj_idx].is_expanded;
+                    }
                 }
             }
         }
@@ -332,7 +343,39 @@ impl App {
     }
 
     pub fn quit(&mut self) {
-        self.should_quit = true;
+        self.mode = AppMode::ConfirmQuit;
+    }
+
+    pub fn execute_command(&mut self, cmd: &str) {
+        match cmd {
+            "cp" => { for p in &mut self.projects { p.is_expanded = false; } }
+            "ep" => { for p in &mut self.projects { p.is_expanded = true; } }
+            "cd" => {
+                for p in &mut self.projects {
+                    for d in &mut p.dates { d.is_expanded = false; }
+                }
+            }
+            "ed" => {
+                for p in &mut self.projects {
+                    for d in &mut p.dates { d.is_expanded = true; }
+                }
+            }
+            "cb" => {
+                for p in &mut self.projects {
+                    for d in &mut p.dates {
+                        for b in &mut d.branches { b.is_expanded = false; }
+                    }
+                }
+            }
+            "eb" => {
+                for p in &mut self.projects {
+                    for d in &mut p.dates {
+                        for b in &mut d.branches { b.is_expanded = true; }
+                    }
+                }
+            }
+            _ => { self.flash_message = Some(format!("Unknown command: :{}", cmd)); }
+        }
     }
 
     pub fn next_item(&mut self) {
@@ -348,37 +391,14 @@ impl App {
                     self.commit_list_state.select(None);
                 }
             }
-            AppMode::CommitsView => {
+            AppMode::CommitsView | AppMode::Details => {
+                let limit = self.commit_list_map.len().saturating_sub(1);
                 let i = match self.commit_list_state.selected() {
-                    Some(i) => i.saturating_add(1),
+                    Some(i) => if i >= limit { 0 } else { i + 1 },
                     None => 0,
                 };
-                self.commit_list_state.select(Some(i));
-            }
-            AppMode::Details => {
-                if let Some(proj_idx) = self.selected_project_idx {
-                    if proj_idx < self.projects.len() {
-                        let mut total_rendered = 0;
-                        const LIMIT: usize = 1000;
-                        if !self.projects[proj_idx].branches.is_empty() {
-                            total_rendered += 1;
-                        }
-                        for b in &self.projects[proj_idx].branches {
-                            if total_rendered >= LIMIT { break; }
-                            total_rendered += 1;
-                            total_rendered += b.commits.len();
-                        }
-                        if total_rendered > LIMIT {
-                            total_rendered = LIMIT + 1;
-                        }
-                        if total_rendered > 0 {
-                            let i = match self.commit_list_state.selected() {
-                                Some(i) => if i >= total_rendered.saturating_sub(1) { 0 } else { i + 1 },
-                                None => 0,
-                            };
-                            self.commit_list_state.select(Some(i));
-                        }
-                    }
+                if limit > 0 {
+                    self.commit_list_state.select(Some(i));
                 }
             }
             AppMode::InputAuthor => {
@@ -408,38 +428,15 @@ impl App {
                     self.commit_list_state.select(None);
                 }
             }
-            AppMode::Details => {
-                if let Some(proj_idx) = self.selected_project_idx {
-                    if proj_idx < self.projects.len() {
-                        let mut total_rendered = 0;
-                        const LIMIT: usize = 1000;
-                        if !self.projects[proj_idx].branches.is_empty() {
-                            total_rendered += 1;
-                        }
-                        for b in &self.projects[proj_idx].branches {
-                            if total_rendered >= LIMIT { break; }
-                            total_rendered += 1;
-                            total_rendered += b.commits.len();
-                        }
-                        if total_rendered > LIMIT {
-                            total_rendered = LIMIT + 1;
-                        }
-                        if total_rendered > 0 {
-                            let i = match self.commit_list_state.selected() {
-                                Some(i) => if i == 0 { total_rendered.saturating_sub(1) } else { i - 1 },
-                                None => 0,
-                            };
-                            self.commit_list_state.select(Some(i));
-                        }
-                    }
-                }
-            }
-            AppMode::CommitsView => {
+            AppMode::Details | AppMode::CommitsView => {
+                let limit = self.commit_list_map.len().saturating_sub(1);
                 let i = match self.commit_list_state.selected() {
-                    Some(i) => if i == 0 { 0 } else { i - 1 },
+                    Some(i) => if i == 0 { limit } else { i - 1 },
                     None => 0,
                 };
-                self.commit_list_state.select(Some(i));
+                if limit > 0 {
+                    self.commit_list_state.select(Some(i));
+                }
             }
             AppMode::InputAuthor => {
                 let filtered = self.get_filtered_authors();
@@ -458,7 +455,12 @@ impl App {
     pub fn enter_details(&mut self) {
         if let Some(proj_idx) = self.selected_project_idx {
             if proj_idx < self.projects.len() {
-                let total_commits: usize = self.projects[proj_idx].branches.iter().map(|b| b.commits.len()).sum();
+                let mut total_commits = 0;
+                for d in &self.projects[proj_idx].dates {
+                    for b in &d.branches {
+                        total_commits += b.commits.len();
+                    }
+                }
                 if total_commits > 0 {
                     self.mode = AppMode::Details;
                     self.commit_list_state.select(Some(0));
@@ -480,8 +482,13 @@ impl App {
     }
 
     pub fn enter_input_mode(&mut self, mode: AppMode) {
-        self.mode = mode;
-        self.input.reset();
+        match mode {
+            AppMode::InputAuthor | AppMode::InputDate | AppMode::InputProfile | AppMode::FileExplorer | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::InputCommitSearch | AppMode::Command => {
+                self.input.reset();
+                self.mode = mode;
+            }
+            _ => { self.mode = mode; }
+        }
         match self.mode {
             AppMode::InputAuthor => {
                 self.input = self.input.clone().with_value(if self.author_filter == "Any" { String::new() } else { self.author_filter.clone() });
@@ -548,6 +555,15 @@ impl App {
                 self.branch_filter = self.input.value().to_string();
                 self.reload_data();
             }
+            AppMode::InputCommitSearch => {
+                self.commit_search = self.input.value().to_string();
+                self.mode = AppMode::Normal;
+            }
+            AppMode::Command => {
+                let cmd = self.input.value().to_string();
+                self.execute_command(&cmd);
+                self.mode = AppMode::Normal;
+            }
             AppMode::InputProfile => {
                 let name = self.input.value().to_string();
                 if !name.is_empty() {
@@ -588,7 +604,12 @@ impl App {
     }
 
     pub fn cancel_input(&mut self) {
-        self.mode = AppMode::Normal;
+        match self.mode {
+            AppMode::InputAuthor | AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::InputCommitSearch | AppMode::Command => {
+                self.mode = AppMode::Normal;
+            }
+            _ => { self.mode = AppMode::Normal; }
+        }
     }
 
     pub fn handle_mouse_event(&mut self, event: crossterm::event::MouseEvent) {
@@ -643,30 +664,36 @@ impl App {
         let mut file = File::create(path)?;
 
         for proj in &self.projects {
-            if !proj.enabled || proj.branches.is_empty() {
+            if !proj.enabled || proj.dates.is_empty() {
                 continue;
             }
             
             let mut has_commits = false;
             let mut proj_output = format!("- {}(", proj.name);
             
-            let mut branch_strings = Vec::new();
-            for branch in &proj.branches {
-                if branch.commits.is_empty() { continue; }
-                has_commits = true;
-                
-                let commit_summaries: Vec<String> = branch.commits
-                    .iter()
-                    .map(|c| {
-                        format!("{} {}", c.id.chars().take(7).collect::<String>(), c.message.chars().take(30).collect::<String>())
-                    })
-                    .collect();
-                
-                branch_strings.push(format!("{}({})", branch.name, commit_summaries.join(", ")));
+            let mut date_strings = Vec::new();
+            for date_group in &proj.dates {
+                let mut branch_strings = Vec::new();
+                for branch in &date_group.branches {
+                    if branch.commits.is_empty() { continue; }
+                    has_commits = true;
+                    
+                    let commit_summaries: Vec<String> = branch.commits
+                        .iter()
+                        .map(|c| {
+                            format!("{} {}", c.id.chars().take(7).collect::<String>(), c.message.chars().take(30).collect::<String>())
+                        })
+                        .collect();
+                    
+                    branch_strings.push(format!("{}({})", branch.name, commit_summaries.join(", ")));
+                }
+                if !branch_strings.is_empty() {
+                    date_strings.push(format!("{}: {}", date_group.date, branch_strings.join(", ")));
+                }
             }
             
             if has_commits {
-                proj_output.push_str(&branch_strings.join(", "));
+                proj_output.push_str(&date_strings.join("; "));
                 proj_output.push_str(")\n");
                 file.write_all(proj_output.as_bytes())?;
             }

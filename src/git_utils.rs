@@ -13,8 +13,16 @@ pub struct GitCommit {
 }
 
 #[derive(Clone)]
-pub struct BranchCommits {
+pub struct DateGroup {
+    pub date: String,
+    pub is_expanded: bool,
+    pub branches: Vec<BranchGroup>,
+}
+
+#[derive(Clone)]
+pub struct BranchGroup {
     pub name: String,
+    pub is_expanded: bool,
     pub commits: Vec<GitCommit>,
 }
 
@@ -51,7 +59,7 @@ pub fn get_commits(
     branch_filter: &str,
     start_date: chrono::DateTime<chrono::Local>,
     end_date: chrono::DateTime<chrono::Local>,
-) -> Result<Vec<BranchCommits>, git2::Error> {
+) -> Result<Vec<DateGroup>, git2::Error> {
     let repo = Repository::open(repo_path)?;
     let mut branch_commits = Vec::new();
     let start_ts = start_date.timestamp();
@@ -133,12 +141,42 @@ pub fn get_commits(
                 }
             
             if !commits.is_empty() {
-                branch_commits.push(BranchCommits { name: branch_name, commits });
+                branch_commits.push((branch_name, commits));
             }
         }
     }
+    
+    let mut date_map: std::collections::HashMap<String, std::collections::HashMap<String, Vec<GitCommit>>> = std::collections::HashMap::new();
+    
+    for (branch_name, commits) in branch_commits {
+        for commit in commits {
+            let d_str = commit.date.format("%Y-%m-%d").to_string();
+            date_map.entry(d_str).or_default().entry(branch_name.clone()).or_default().push(commit);
+        }
+    }
+    
+    let mut date_groups = Vec::new();
+    for (date, branch_map) in date_map {
+        let mut branches = Vec::new();
+        for (name, commits) in branch_map {
+            let mut sorted_commits = commits;
+            sorted_commits.sort_by(|a, b| b.date.cmp(&a.date));
+            branches.push(BranchGroup {
+                name,
+                is_expanded: true,
+                commits: sorted_commits,
+            });
+        }
+        branches.sort_by(|a, b| a.name.cmp(&b.name));
+        date_groups.push(DateGroup {
+            date,
+            is_expanded: true,
+            branches,
+        });
+    }
+    date_groups.sort_by(|a, b| b.date.cmp(&a.date));
 
-    Ok(branch_commits)
+    Ok(date_groups)
 }
 
 pub fn get_recent_authors(repo_path: &Path) -> Vec<String> {

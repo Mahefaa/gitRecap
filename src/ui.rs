@@ -1,8 +1,8 @@
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
@@ -33,7 +33,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     );
     let top_bar = Paragraph::new(Line::from(vec![
         Span::styled("GitRecap ", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw(format!("| Projects w/ Commits: {} | ", app.projects.iter().filter(|p| p.enabled && !p.branches.is_empty()).count())),
+        Span::raw(format!("| Projects w/ Commits: {} | ", app.projects.iter().filter(|p| p.enabled && !p.dates.is_empty()).count())),
         Span::styled(filter_text, Style::default().fg(Color::Cyan)),
     ]))
     .block(Block::default().borders(Borders::ALL).title("Summary"));
@@ -136,6 +136,25 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 chunks[2].y + 1,
             ));
         },
+        AppMode::Command => {
+            let main_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+                .split(chunks[1]);
+                
+            render_projects_list(f, app, main_chunks[0]);
+            render_commits_list(f, app, main_chunks[1]);
+            
+            let input_widget = Paragraph::new(format!(":{}", app.input.value()))
+                .style(Style::default().fg(Color::Yellow))
+                .block(Block::default().borders(Borders::ALL).title("Command (e.g. cp, cd, cb) (Esc cancel, Enter submit)"));
+            f.render_widget(input_widget, chunks[2]);
+            #[allow(clippy::cast_possible_truncation)]
+            f.set_cursor_position((
+                chunks[2].x + 2 + app.input.visual_cursor() as u16,
+                chunks[2].y + 1,
+            ));
+        },
         AppMode::InputProfile => {
             let main_chunks = Layout::default()
                 .direction(Direction::Horizontal)
@@ -180,7 +199,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 chunks[2].y + 1,
             ));
         },
-        AppMode::Normal | AppMode::Details | AppMode::CommitsView => {
+        AppMode::Normal | AppMode::Details | AppMode::CommitsView | AppMode::ConfirmQuit | AppMode::Help => {
             let main_chunks = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
@@ -193,12 +212,14 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             render_commits_list(f, app, main_chunks[1]);
             
             let help_text = match app.mode {
-                AppMode::Normal => "q: Quit | P: Profile | a: Author | d: Date | b: Branch | p: Explorer | A: Add Path | l/Enter: Commits | Alt+Right: View Commits | Space: Toggle | s: Toggle All | c: Collapse | r: Rm | D: Rm All | R: Refresh | e: Export | u: Push",
-                AppMode::Details => "q: Quit | h/Esc/Alt+Left: Back | j/k: Navigate Commits | /: Search Commits | e: Export",
-                AppMode::CommitsView => "q: Quit | h/Esc/Alt+Left: Back | j/k: Navigate Commits | /: Search Commits | e: Export",
+                AppMode::Normal | AppMode::ConfirmQuit | AppMode::Help => "?: Help Modal | q: Quit | j/k: Nav | g/G: Top/Bot | Space: Toggle | c: Collapse | :cmd | P: Profile | p: Explorer | u: Push | R: Refresh",
+                AppMode::Details => "q: Quit | h/Esc/Alt+Left: Back | j/k: Nav | g/G: Top/Bot | c: Collapse | :cmd | /: Search | e: Export | ?: Help",
+                AppMode::CommitsView => "q: Quit | h/Esc/Alt+Left: Back | j/k: Nav | g/G: Top/Bot | c: Collapse | :cmd | /: Search | e: Export | ?: Help",
                 _ => "",
             };
-            let footer = Paragraph::new(help_text).block(Block::default().borders(Borders::ALL));
+            let footer = Paragraph::new(help_text)
+                .wrap(Wrap { trim: true })
+                .block(Block::default().borders(Borders::ALL));
             f.render_widget(footer, chunks[2]);
         }
         AppMode::ConfirmPush { force } => {
@@ -221,6 +242,55 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             let p = Paragraph::new(msg).block(block).alignment(ratatui::layout::Alignment::Center);
             f.render_widget(p, area);
         }
+    }
+
+    if let AppMode::Help = app.mode {
+        let help_text = vec![
+            Line::from(Span::styled("--- Global Navigation ---", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),
+            Line::from(" j/k, Up/Down  : Navigate lists"),
+            Line::from(" g / G         : Jump to Top / Bottom"),
+            Line::from(" q             : Quit application"),
+            Line::from(" ?             : Toggle this help modal"),
+            Line::from(""),
+            Line::from(Span::styled("--- Projects View ---", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),
+            Line::from(" Space         : Toggle project enable/disable"),
+            Line::from(" s             : Toggle all projects"),
+            Line::from(" c             : Collapse/Expand project node"),
+            Line::from(" l / Enter     : View commit details / expand"),
+            Line::from(" r             : Remove selected project from list"),
+            Line::from(" D             : Remove all projects from list"),
+            Line::from(" H             : Hide projects with 0 commits"),
+            Line::from(""),
+            Line::from(Span::styled("--- Filtering & Profiles ---", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),
+            Line::from(" a / d / b     : Filter by Author / Date / Branch"),
+            Line::from(" P             : Switch or Create Profile"),
+            Line::from(" p             : Open File Explorer (Add sources visually)"),
+            Line::from(" A             : Add a source path manually"),
+            Line::from(" R             : Reload Git Data"),
+            Line::from(""),
+            Line::from(Span::styled("--- Commits View ---", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),
+            Line::from(" h / Esc / Alt+Left : Go back to Projects view"),
+            Line::from(" /             : Search inside commits"),
+            Line::from(" c             : Collapse/Expand Date or Branch"),
+            Line::from(" e             : Export summary to summary.txt"),
+            Line::from(" u / U         : Push / Force Push selected project"),
+            Line::from(""),
+            Line::from(Span::styled("--- Command Mode (:) ---", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),
+            Line::from(" :cp / :ep     : Collapse / Expand all projects"),
+            Line::from(" :cd / :ed     : Collapse / Expand all dates"),
+            Line::from(" :cb / :eb     : Collapse / Expand all branches"),
+            Line::from(""),
+            Line::from(Span::styled("Press '?' or 'Esc' to close this modal.", Style::default().fg(Color::DarkGray))),
+        ];
+        
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title("Help & Shortcuts")
+            .border_style(Style::default().fg(Color::Green));
+            
+        let area = centered_rect(60, 80, f.area());
+        f.render_widget(ratatui::widgets::Clear, area);
+        f.render_widget(Paragraph::new(help_text).block(block), area);
     }
 
     if let Some(msg) = &app.flash_message {
@@ -273,14 +343,25 @@ fn render_projects_list(f: &mut Frame, app: &mut App, area: Rect) {
     let items: Vec<ListItem> = app
         .projects
         .iter()
+        .filter(|p| {
+            if app.hide_zero_commits {
+                !p.dates.is_empty()
+            } else {
+                true
+            }
+        })
         .map(|p| {
             let checkbox = if p.enabled { "[x]" } else { "[ ]" };
             let collapse_icon = if p.is_expanded { "[-]" } else { "[+]" };
             let style = if p.enabled { Style::default() } else { Style::default().fg(Color::DarkGray) };
             
             let commit_count = if p.enabled {
-                let count: usize = p.branches.iter().map(|b| b.commits.len()).sum();
-                format!("({} commits)", count)
+                let count: usize = p.dates.iter().flat_map(|d| d.branches.iter().map(|b| b.commits.len())).sum();
+                if count > 0 {
+                    format!("({} commits)", count)
+                } else {
+                    crate::git_utils::get_last_commit_info(&p.path).unwrap_or_else(|| "(0 commits)".to_string())
+                }
             } else {
                 "(disabled)".to_string()
             };
@@ -319,7 +400,7 @@ fn render_projects_list(f: &mut Frame, app: &mut App, area: Rect) {
 
 fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
     let mut items = Vec::new();
-    app.commit_list_project_map.clear();
+    app.commit_list_map.clear();
 
     let mut projects_to_show = Vec::new();
     
@@ -342,83 +423,94 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
     let mut total_commits_in_view = 0;
 
     for (proj_idx, proj) in projects_to_show {
-        if proj.branches.is_empty() {
+        if proj.dates.is_empty() {
             continue;
         }
         
-        let proj_commits: usize = proj.branches.iter().map(|b| b.commits.len()).sum();
+        let proj_commits: usize = proj.dates.iter().flat_map(|d| d.branches.iter().map(|b| b.commits.len())).sum();
         total_commits_in_view += proj_commits;
         
         if commit_count >= LIMIT {
-            continue; // Skip rendering more projects if we hit the limit
+            continue;
         }
         
         if !proj.is_expanded {
             items.push(ListItem::new(Line::from(vec![
-                Span::styled(format!("{} (Collapsed)", proj.name), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{} (collapsed)", proj.name), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
             ])));
-            app.commit_list_project_map.push(proj_idx);
+            app.commit_list_map.push((proj_idx, None, None));
             continue;
         }
 
         items.push(ListItem::new(Line::from(vec![
             Span::styled(format!("{} ", proj.name), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
         ])));
-        app.commit_list_project_map.push(proj_idx);
+        app.commit_list_map.push((proj_idx, None, None));
         
-        for branch in &proj.branches {
-            if commit_count >= LIMIT {
-                break;
-            }
-            if !branch.commits.is_empty() {
+        for (date_idx, date_group) in proj.dates.iter().enumerate() {
+            if commit_count >= LIMIT { break; }
+            if !date_group.is_expanded {
                 items.push(ListItem::new(Line::from(vec![
                     Span::raw("  "),
-                    Span::styled(format!("{} ", branch.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("{} (collapsed)", date_group.date), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
                 ])));
-                app.commit_list_project_map.push(proj_idx);
+                app.commit_list_map.push((proj_idx, Some(date_idx), None));
+                continue;
             }
             
-            let mut last_date = String::new();
+            items.push(ListItem::new(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(format!("{} ", date_group.date), Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
+            ])));
+            app.commit_list_map.push((proj_idx, Some(date_idx), None));
             
-            for commit in &branch.commits {
-                if !app.commit_search.is_empty() {
-                    let search_lower = app.commit_search.to_lowercase();
-                    if !commit.message.to_lowercase().contains(&search_lower) && !commit.id.to_lowercase().contains(&search_lower) {
-                        continue;
-                    }
-                }
-
-                if commit_count >= LIMIT {
-                    break;
-                }
-                
-                let current_date = commit.date.format("%Y-%m-%d").to_string();
-                if current_date != last_date {
+            for (branch_idx, branch_group) in date_group.branches.iter().enumerate() {
+                if commit_count >= LIMIT { break; }
+                if !branch_group.is_expanded {
                     items.push(ListItem::new(Line::from(vec![
                         Span::raw("    "),
-                        Span::styled(format!("{} ", current_date), Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("{} (collapsed)", branch_group.name), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
                     ])));
-                    app.commit_list_project_map.push(proj_idx);
-                    last_date = current_date;
+                    app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx)));
+                    continue;
                 }
-
-                let push_status = if commit.is_pushed {
-                    Span::raw("")
-                } else {
-                    Span::styled("* ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
-                };
                 
-                let line = Line::from(vec![
-                    Span::raw("      "),
-                    push_status,
-                    Span::raw(format!("{} ", commit.id.chars().take(7).collect::<String>())),
-                    Span::styled(format!("{} ", commit.date.format("%H:%M")), Style::default().fg(Color::Blue)),
-                    Span::styled(format!("[{}] ", commit.author), Style::default().fg(Color::LightCyan)),
-                    Span::raw(format!("{}", commit.message)),
-                ]);
-                items.push(ListItem::new(vec![line]));
-                app.commit_list_project_map.push(proj_idx);
-                commit_count += 1;
+                if !branch_group.commits.is_empty() {
+                    items.push(ListItem::new(Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled(format!("{} ", branch_group.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+                    ])));
+                    app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx)));
+                }
+                
+                for commit in &branch_group.commits {
+                    if !app.commit_search.is_empty() {
+                        let search_lower = app.commit_search.to_lowercase();
+                        if !commit.message.to_lowercase().contains(&search_lower) && !commit.id.to_lowercase().contains(&search_lower) {
+                            continue;
+                        }
+                    }
+
+                    if commit_count >= LIMIT { break; }
+                    
+                    let push_status = if commit.is_pushed {
+                        Span::raw("")
+                    } else {
+                        Span::styled("* ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+                    };
+                    
+                    let line = Line::from(vec![
+                        Span::raw("      "),
+                        push_status,
+                        Span::raw(format!("{} ", commit.id.chars().take(7).collect::<String>())),
+                        Span::styled(format!("{} ", commit.date.format("%H:%M")), Style::default().fg(Color::Blue)),
+                        Span::styled(format!("[{}] ", commit.author), Style::default().fg(Color::LightCyan)),
+                        Span::raw(format!("{}", commit.message)),
+                    ]);
+                    items.push(ListItem::new(vec![line]));
+                    app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx)));
+                    commit_count += 1;
+                }
             }
         }
     }
@@ -428,8 +520,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
         items.push(ListItem::new(Line::from(vec![
             Span::styled(format!("... and {} more commits (export to see all)", hidden), Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
         ])));
-        // Just push a dummy mapping for the "..." element to maintain array size sync if someone hits 'c' on it
-        app.commit_list_project_map.push(usize::MAX);
+        app.commit_list_map.push((usize::MAX, None, None));
     }
 
     let title = if app.is_loading { "Commits [LOADING...]" } else { "Commits" };

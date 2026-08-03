@@ -84,6 +84,22 @@ fn run_app(
                     KeyCode::Char('e') => {
                         let _ = app.export_summary("summary.txt");
                     }
+                    KeyCode::Char(':') => app.enter_input_mode(AppMode::Command),
+                    KeyCode::Char('G') => {
+                        let last = app.projects.len().saturating_sub(1);
+                        app.project_list_state.select(Some(last));
+                        app.selected_project_idx = Some(last);
+                    }
+                    KeyCode::Char('g') => {
+                        if !app.projects.is_empty() {
+                            app.project_list_state.select(Some(0));
+                            app.selected_project_idx = Some(0);
+                        }
+                    }
+                    KeyCode::Char('H') => {
+                        app.hide_zero_commits = !app.hide_zero_commits;
+                    }
+                    KeyCode::Char('?') => app.mode = AppMode::Help,
                     _ => {}
                 },
                 AppMode::CommitsView | AppMode::Details => {
@@ -104,6 +120,17 @@ fn run_app(
                         },
                         KeyCode::Char('c') => app.toggle_expand_from_commits_view(),
                         KeyCode::Char('/') => app.enter_input_mode(AppMode::InputCommitSearch),
+                        KeyCode::Char(':') => app.enter_input_mode(AppMode::Command),
+                        KeyCode::Char('G') => {
+                            let last = app.commit_list_map.len().saturating_sub(1);
+                            app.commit_list_state.select(Some(last));
+                        }
+                        KeyCode::Char('g') => {
+                            if !app.commit_list_map.is_empty() {
+                                app.commit_list_state.select(Some(0));
+                            }
+                        }
+                        KeyCode::Char('?') => app.mode = AppMode::Help,
                         _ => {}
                     }
                 },
@@ -119,23 +146,28 @@ fn run_app(
                         }
                     }
                 },
-                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch => {
+                AppMode::ConfirmQuit => {
+                    match key.code {
+                        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => app.should_quit = true,
+                        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => app.mode = AppMode::Normal,
+                        _ => {}
+                    }
+                },
+                AppMode::Help => {
+                    match key.code {
+                        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => app.mode = AppMode::Normal,
+                        _ => {}
+                    }
+                },
+                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::InputCommitSearch | AppMode::Command => {
                     match key.code {
                         KeyCode::Enter => app.submit_input(),
                         KeyCode::Esc => app.cancel_input(),
                         _ => {
                             app.input.handle_event(&Event::Key(key));
-                        }
-                    }
-                },
-                AppMode::InputCommitSearch => {
-                    match key.code {
-                        KeyCode::Enter | KeyCode::Esc => {
-                            app.mode = AppMode::CommitsView;
-                        },
-                        _ => {
-                            app.input.handle_event(&Event::Key(key));
-                            app.commit_search = app.input.value().to_string();
+                            if matches!(app.mode, AppMode::InputCommitSearch) {
+                                app.commit_search = app.input.value().to_string();
+                            }
                         }
                     }
                 },
