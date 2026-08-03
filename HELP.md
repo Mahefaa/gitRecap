@@ -64,4 +64,8 @@ Press `:` to enter command mode (like Vim). Commands let you perform sweeping ac
 - `:ed`: **Expand all dates**.
 - `:cb`: **Collapse all branches**.
 - `:eb`: **Expand all branches**.
-- *(More advanced commands are planned in the `ROADMAP.md`!)*
+- `:w <filename>` or `:export <filename>`: Export the current view to a specific file.
+- `:q!`: Force quit instantly without the confirmation dialog.
+- `:sort name` or `:sort activity`: Dynamically sort your project list.
+- `:since <time>` or `:until <time>`: Dynamically set a date filter using natural language (e.g. `:since 1 week`).
+- `:fetch all`: Spawns a background worker to run `git fetch --all` across every tracked repository concurrently!

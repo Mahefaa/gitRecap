@@ -30,6 +30,7 @@ pub enum LoadingResult {
     ProjectScanned(ProjectData),
     ScanComplete(Vec<String>),
     ReloadComplete(Vec<ProjectData>),
+    FetchComplete,
 }
 
 #[derive(Clone)]
@@ -139,6 +140,13 @@ impl App {
                         self.projects = updated_projects;
                         self.is_loading = false;
                         self.loading_rx = None;
+                        break;
+                    }
+                    LoadingResult::FetchComplete => {
+                        self.is_loading = false;
+                        self.loading_rx = None;
+                        self.flash_message = Some("Fetch complete!".to_string());
+                        self.reload_data(); // reload after fetching
                         break;
                     }
                 }
@@ -361,7 +369,12 @@ impl App {
     }
 
     pub fn execute_command(&mut self, cmd: &str) {
-        match cmd {
+        let cmd = cmd.trim();
+        let parts: Vec<&str> = cmd.splitn(2, ' ').collect();
+        let command = parts[0];
+        let arg = parts.get(1).unwrap_or(&"").trim();
+
+        match command {
             "cp" => { for p in &mut self.projects { p.is_expanded = false; } }
             "ep" => { for p in &mut self.projects { p.is_expanded = true; } }
             "cd" => {
@@ -388,7 +401,75 @@ impl App {
                     }
                 }
             }
-            _ => { self.flash_message = Some(format!("Unknown command: :{}", cmd)); }
+            "q!" => { self.should_quit = true; }
+            "w" | "export" => {
+                if arg.is_empty() {
+                    self.flash_message = Some("Filename required for export".to_string());
+                } else {
+                    match self.export_summary(arg) {
+                        Ok(_) => self.flash_message = Some(format!("Exported to {}", arg)),
+                        Err(e) => self.flash_message = Some(format!("Export failed: {}", e)),
+                    }
+                }
+            }
+            "sort" => {
+                match arg {
+                    "name" => {
+                        self.projects.sort_by(|a, b| a.name.cmp(&b.name));
+                        self.flash_message = Some("Sorted by name".to_string());
+                    }
+                    "activity" | "commits" => {
+                        self.projects.sort_by(|a, b| {
+                            let a_count: usize = a.dates.iter().flat_map(|d| d.branches.iter().map(|b| b.commits.len())).sum();
+                            let b_count: usize = b.dates.iter().flat_map(|d| d.branches.iter().map(|b| b.commits.len())).sum();
+                            b_count.cmp(&a_count)
+                        });
+                        self.flash_message = Some("Sorted by activity".to_string());
+                    }
+                    _ => self.flash_message = Some("Sort criteria must be 'name', 'activity', or 'commits'".to_string()),
+                }
+            }
+            "since" | "until" => {
+                if arg.is_empty() {
+                    self.flash_message = Some(format!("Date required for {}", command));
+                } else {
+                    let date_str = if command == "since" {
+                        format!("{}..today", arg)
+                    } else {
+                        format!("startofmonth..{}", arg)
+                    };
+                    
+                    if let Some((start, end)) = parse_date_input(&date_str) {
+                        self.date_start_filter = start;
+                        self.date_end_filter = end;
+                        self.current_profile.date_filter = date_str;
+                        self.config.update_active_profile(self.current_profile.clone());
+                        self.reload_data();
+                        self.flash_message = Some(format!("Date filter updated: {}", self.current_profile.date_filter));
+                    } else {
+                        self.flash_message = Some("Invalid date format".to_string());
+                    }
+                }
+            }
+            "fetch" => {
+                if arg == "all" {
+                    let paths: Vec<PathBuf> = self.projects.iter().filter(|p| p.enabled).map(|p| p.path.clone()).collect();
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    std::thread::spawn(move || {
+                        use rayon::prelude::*;
+                        paths.par_iter().for_each(|p| {
+                            let _ = std::process::Command::new("git").arg("fetch").arg("--all").current_dir(p).output();
+                        });
+                        let _ = tx.send(LoadingResult::FetchComplete);
+                    });
+                    self.is_loading = true;
+                    self.loading_rx = Some(rx);
+                    self.flash_message = Some("Fetching all repositories in background...".to_string());
+                } else {
+                    self.flash_message = Some("Unknown fetch command. Try ':fetch all'".to_string());
+                }
+            }
+            _ => { self.flash_message = Some(format!("Unknown command: :{}", command)); }
         }
     }
 

@@ -15,11 +15,11 @@ It ensures we do not lose track of the ambitious goals set for this project.
 - [ ] **Optional GUI Backend:** Evaluate migrating the terminal backend to a GPU-accelerated graphics layer (like `alacritty` recommendations, or a hybrid Rust GUI like `egui` / `iced`) allowing ultra-fast rendering for powerful GPUs, while retaining a fallback mode for pure TUI environments.
 
 ## 🛠️ Vim-Style Commands (`:`)
-- [ ] `:w <filename>` / `:export <filename>`: Export recap to a custom file (e.g., `:w report.md`).
-- [ ] `:q!`: Force quit instantly without confirmation.
-- [ ] `:sort <criteria>`: Sort projects dynamically by activity, name, or commit count.
-- [ ] `:since <time>` / `:until <time>`: Natural language date filtering (e.g., `:since 1 week ago`).
-- [ ] `:fetch all`: Run a background job to sync all known repositories.
+- [x] `:w <filename>` / `:export <filename>`: Export recap to a custom file (e.g., `:w report.md`).
+- [x] `:q!`: Force quit instantly without confirmation.
+- [x] `:sort <criteria>`: Sort projects dynamically by activity, name, or commit count.
+- [x] `:since <time>` / `:until <time>`: Natural language date filtering (e.g., `:since 1 week ago`).
+- [x] `:fetch all`: Run a background job to sync all known repositories.
 
 ## 🌟 Game-Changing Features
 1. **Commit Diff Viewer (Split Screen)**
