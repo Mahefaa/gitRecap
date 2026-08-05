@@ -966,6 +966,7 @@ impl App {
         self.loading_rx = Some(rx);
         
         let projects = self.projects.clone();
+        let timeline = self.timeline.clone();
         
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
@@ -1007,86 +1008,72 @@ impl App {
                                 output.push_str(&String::from_utf8_lossy(&cmd_out.stdout));
                             }
                         }
-                        (current_idx, output)
+                        
+                        let mut commit_map = std::collections::HashMap::new();
+                        let mut current_commit = String::new();
+                        let mut current_files = Vec::new();
+                        
+                        for line in output.lines() {
+                            if line.starts_with("COMMIT:") {
+                                if !current_commit.is_empty() {
+                                    commit_map.insert(current_commit.clone(), current_files.join("\n"));
+                                }
+                                current_commit = line.trim_start_matches("COMMIT:").trim().to_string();
+                                current_files.clear();
+                            } else if !line.trim().is_empty() {
+                                current_files.push(line.trim().to_string());
+                            }
+                        }
+                        if !current_commit.is_empty() {
+                            commit_map.insert(current_commit, current_files.join("\n"));
+                        }
+                        (current_idx, commit_map)
                     });
                     idx += 1;
                 }
                 
-                let mut results = vec![String::new(); idx];
-                while let Some(Ok((i, output))) = join_set.join_next().await {
-                    results[i] = output;
+                let mut all_diffs = std::collections::HashMap::new();
+                while let Some(Ok((_, commit_map))) = join_set.join_next().await {
+                    all_diffs.extend(commit_map);
                 }
                 
-                let mut project_diffs = std::collections::HashMap::new();
-                let mut proj_idx = 0;
-                for proj in &projects {
-                    if !proj.enabled || proj.dates.is_empty() { continue; }
+                // Divide and conquer: Generate markdown for each date in parallel
+                use rayon::prelude::*;
+                let date_strings: Vec<String> = timeline.par_iter().map(|date_group| {
+                    let mut date_content = format!("## Date: {}\n\n", date_group.date);
                     
-                    let proj_output = &results[proj_idx];
-                    let mut commit_map = std::collections::HashMap::new();
-                    let mut current_commit = String::new();
-                    let mut current_files = Vec::new();
-                    
-                    for line in proj_output.lines() {
-                        if line.starts_with("COMMIT:") {
-                            if !current_commit.is_empty() {
-                                commit_map.insert(current_commit.clone(), current_files.join("\n"));
-                            }
-                            current_commit = line.trim_start_matches("COMMIT:").trim().to_string();
-                            current_files.clear();
-                        } else if !line.trim().is_empty() {
-                            current_files.push(line.trim().to_string());
-                        }
-                    }
-                    if !current_commit.is_empty() {
-                        commit_map.insert(current_commit, current_files.join("\n"));
-                    }
-                    
-                    project_diffs.insert(proj.name.clone(), commit_map);
-                    proj_idx += 1;
-                }
-                
-                let mut file = File::create(&path).map_err(|e| e.to_string())?;
-                writeln!(file, "# Git Recap Summary\n").map_err(|e| e.to_string())?;
-
-                for proj in &projects {
-                    if !proj.enabled || proj.dates.is_empty() { continue; }
-                    let mut proj_has_commits = false;
-                    let mut proj_content = String::new();
-                    let commit_map = project_diffs.get(&proj.name).unwrap();
-                    
-                    for date_group in &proj.dates {
-                        let mut date_has_commits = false;
-                        let mut date_content = format!("### {}\n\n", date_group.date);
+                    for proj in &date_group.projects {
+                        let mut proj_has_commits = false;
+                        let mut proj_content = format!("### Repository: {}\n\n", proj.name);
                         
-                        for branch in &date_group.branches {
-                            if branch.commits.is_empty() { continue; }
+                        for author_group in &proj.authors {
+                            if author_group.commits.is_empty() { continue; }
                             proj_has_commits = true;
-                            date_has_commits = true;
+                            proj_content.push_str(&format!("#### Author: `{}`\n\n", author_group.name));
                             
-                            date_content.push_str(&format!("#### Branch: `{}`\n\n", branch.name));
-                            
-                            for c in &branch.commits {
-                                date_content.push_str(&format!("- **[{}]** `{}` {}\n", c.author, c.id.chars().take(7).collect::<String>(), c.message));
+                            for c in &author_group.commits {
+                                proj_content.push_str(&format!("- `{}` {}\n", c.id.chars().take(7).collect::<String>(), c.message));
                                 
-                                if let Some(files) = commit_map.get(&c.id) {
+                                if let Some(files) = all_diffs.get(&c.id) {
                                     for line in files.lines() {
-                                        date_content.push_str(&format!("  - `{}`\n", line));
+                                        proj_content.push_str(&format!("  - `{}`\n", line));
                                     }
                                 }
                             }
-                            date_content.push('\n');
+                            proj_content.push('\n');
                         }
-                        
-                        if date_has_commits {
-                            proj_content.push_str(&date_content);
+                        if proj_has_commits {
+                            date_content.push_str(&proj_content);
                         }
                     }
-                    
-                    if proj_has_commits {
-                        writeln!(file, "## Repository: {}\n", proj.name).map_err(|e| e.to_string())?;
-                        file.write_all(proj_content.as_bytes()).map_err(|e| e.to_string())?;
-                    }
+                    date_content
+                }).collect();
+                
+                // Reunite
+                let mut file = File::create(&path).map_err(|e| e.to_string())?;
+                writeln!(file, "# Git Recap Summary\n").map_err(|e| e.to_string())?;
+                for ds in date_strings {
+                    file.write_all(ds.as_bytes()).map_err(|e| e.to_string())?;
                 }
                 
                 Ok::<String, String>(format!("Exported to {}", path.display()))
