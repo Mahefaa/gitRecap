@@ -321,21 +321,31 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 proj_colors.insert((*p_name).clone(), colors[i % colors.len()]);
             }
             
-            let mut grouped_data: std::collections::HashMap<String, std::collections::HashMap<String, u64>> = std::collections::HashMap::new();
+            let mut grouped_data: std::collections::HashMap<String, std::collections::HashMap<String, f64>> = std::collections::HashMap::new();
             
             for d in &app.timeline {
                 for p in &d.projects {
-                    if let Some(ref sp) = selected_project_name {
-                        if &p.name != sp { continue; }
-                    }
                     for a in &p.authors {
+                        let mut dates: Vec<_> = a.commits.iter().map(|c| c.date).collect();
+                        dates.sort();
+                        let mut prev_date: Option<chrono::DateTime<chrono::Local>> = None;
                         for c in &a.commits {
+                            let mut hours = 0.5;
+                            if let Some(prev) = prev_date {
+                                let diff = (c.date - prev).num_minutes();
+                                if diff <= 120 && diff >= 0 {
+                                    hours = diff as f64 / 60.0;
+                                }
+                            }
+                            prev_date = Some(c.date);
+                            
                             let key = match app.dashboard_resolution {
                                 crate::app::TimeResolution::Day => c.date.format("%Y-%m-%d").to_string(),
                                 crate::app::TimeResolution::Week => c.date.format("%Y-W%W").to_string(),
                                 crate::app::TimeResolution::Month => c.date.format("%Y-%m").to_string(),
                             };
-                            *grouped_data.entry(key).or_default().entry(p.name.clone()).or_insert(0) += 1;
+                            
+                            *grouped_data.entry(key).or_default().entry(p.name.clone()).or_insert(0.0) += hours;
                         }
                     }
                 }
@@ -349,14 +359,22 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             let mut bar_groups: Vec<ratatui::widgets::BarGroup> = Vec::new();
             for key in &display_keys {
                 let p_map = &grouped_data[key];
+                let total_hours: f64 = p_map.values().sum();
                 let mut bars = Vec::new();
                 for (p_name, _) in &project_stats {
-                    if let Some(&count) = p_map.get(*p_name) {
+                    if let Some(ref sp) = selected_project_name {
+                        if **p_name != *sp { continue; } // Filter rendering dynamically so % is still global
+                    }
+                    if let Some(&hours) = p_map.get(*p_name) {
                         let color = proj_colors.get(*p_name).copied().unwrap_or(Color::Green);
-                        bars.push(Bar::default().value(count).style(Style::default().fg(color)));
+                        let percent = if total_hours > 0.0 { (hours / total_hours) * 100.0 } else { 0.0 };
+                        let percent_rounded = percent.round() as u64;
+                        bars.push(Bar::default().value(percent_rounded).text_value(format!("{}%", percent_rounded)).style(Style::default().fg(color)));
                     }
                 }
-                bar_groups.push(BarGroup::default().label(Line::from(key.as_str())).bars(&bars));
+                if !bars.is_empty() {
+                    bar_groups.push(BarGroup::default().label(Line::from(key.as_str())).bars(&bars));
+                }
             }
             
             let mut most_active_repo = String::from("None");
@@ -428,9 +446,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             f.render_stateful_widget(table, dashboard_layout[1], &mut app.dashboard_list_state);
             
             let barchart_title = match app.dashboard_resolution {
-                crate::app::TimeResolution::Day => "Activity Timeline (Commits per Day) | 't' to toggle resolution",
-                crate::app::TimeResolution::Week => "Activity Timeline (Commits per Week) | 't' to toggle resolution",
-                crate::app::TimeResolution::Month => "Activity Timeline (Commits per Month) | 't' to toggle resolution",
+                crate::app::TimeResolution::Day => "Time Tracking % (Daily) | 't' to toggle resolution",
+                crate::app::TimeResolution::Week => "Time Tracking % (Weekly) | 't' to toggle resolution",
+                crate::app::TimeResolution::Month => "Time Tracking % (Monthly) | 't' to toggle resolution",
             };
             
             let barchart_block_title = if let Some(ref sp) = selected_project_name {
