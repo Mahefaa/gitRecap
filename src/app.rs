@@ -176,12 +176,14 @@ impl App {
 
     pub fn check_background_tasks(&mut self) -> bool {
         let mut updated = false;
+        let mut needs_visibility_update = false;
         if let Some(rx) = &self.loading_rx {
             while let Ok(result) = rx.try_recv() {
                 updated = true;
                 match result {
                     LoadingResult::ProjectScanned(proj) => {
                         self.projects.push(proj);
+                        needs_visibility_update = true;
                         if self.projects.len() == 1 && self.selected_project_idx.is_none() {
                             self.project_list_state.select(Some(0));
                             self.selected_project_idx = Some(0);
@@ -190,6 +192,7 @@ impl App {
                     LoadingResult::ScanComplete(authors) => {
                         self.known_authors = authors;
                         self.projects.sort_by(|a, b| a.name.cmp(&b.name));
+                        needs_visibility_update = true;
                         self.is_loading = false;
                         self.loading_rx = None;
                         self.build_timeline();
@@ -197,6 +200,7 @@ impl App {
                     }
                     LoadingResult::ReloadComplete(updated_projects) => {
                         self.projects = updated_projects;
+                        needs_visibility_update = true;
                         self.is_loading = false;
                         self.loading_rx = None;
                         self.build_timeline();
@@ -220,6 +224,9 @@ impl App {
                     }
                 }
             }
+        }
+        if needs_visibility_update {
+            self.update_visible_projects();
         }
         updated
     }
