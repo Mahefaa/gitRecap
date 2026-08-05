@@ -35,6 +35,13 @@ pub enum SearchTarget {
     Commits,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum TimeResolution {
+    Day,
+    Week,
+    Month,
+}
+
 pub enum LoadingResult {
     ProjectScanned(ProjectData),
     ScanComplete(Vec<String>),
@@ -85,6 +92,7 @@ pub struct App {
     pub commit_list_map: Vec<(usize, Option<usize>, Option<usize>, Option<usize>)>,
     
     pub dashboard_list_state: ratatui::widgets::TableState,
+    pub dashboard_resolution: TimeResolution,
     
     pub sources: Vec<PathBuf>,
     pub projects: Vec<ProjectData>,
@@ -128,6 +136,7 @@ impl App {
             commit_list_map: Vec::new(),
             
             dashboard_list_state: ratatui::widgets::TableState::default(),
+            dashboard_resolution: TimeResolution::Day,
             
             sources: vec![PathBuf::from(".")],
             projects: Vec::new(),
@@ -706,13 +715,31 @@ impl App {
                         paths.par_iter().for_each(|p| {
                             let _ = std::process::Command::new("git").arg("fetch").arg("--all").current_dir(p).output();
                         });
-                        let _ = tx.send(LoadingResult::FetchComplete);
+                        let _ = tx.send(crate::app::LoadingResult::FetchComplete);
                     });
                     self.is_loading = true;
                     self.loading_rx = Some(rx);
-                    self.flash_message = Some("Fetching all repositories in background...".to_string());
+                    self.flash_message = Some("Fetching all enabled projects in background...".to_string());
                 } else {
                     self.flash_message = Some("Unknown fetch command. Try ':fetch all'".to_string());
+                }
+            }
+            "pull" => {
+                if arg == "all" {
+                    let paths: Vec<PathBuf> = self.projects.iter().filter(|p| p.enabled).map(|p| p.path.clone()).collect();
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    std::thread::spawn(move || {
+                        use rayon::prelude::*;
+                        paths.par_iter().for_each(|p| {
+                            let _ = std::process::Command::new("git").arg("pull").current_dir(p).output();
+                        });
+                        let _ = tx.send(crate::app::LoadingResult::FetchComplete);
+                    });
+                    self.is_loading = true;
+                    self.loading_rx = Some(rx);
+                    self.flash_message = Some("Pulling all enabled projects in background...".to_string());
+                } else {
+                    self.flash_message = Some("Unknown pull command. Try ':pull all'".to_string());
                 }
             }
             _ => { self.flash_message = Some(format!("Unknown command: :{}", command)); }

@@ -315,17 +315,48 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 Some(project_stats[sel - 1].0.clone())
             };
             
-            let mut data: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+            let colors = [Color::Red, Color::Yellow, Color::Green, Color::Cyan, Color::Blue, Color::Magenta, Color::LightRed, Color::LightCyan, Color::LightYellow];
+            let mut proj_colors: std::collections::HashMap<String, Color> = std::collections::HashMap::new();
+            for (i, (p_name, _)) in project_stats.iter().enumerate() {
+                proj_colors.insert((*p_name).clone(), colors[i % colors.len()]);
+            }
+            
+            let mut grouped_data: std::collections::HashMap<String, std::collections::HashMap<String, u64>> = std::collections::HashMap::new();
+            
             for d in &app.timeline {
-                let date_str = d.date.clone();
                 for p in &d.projects {
                     if let Some(ref sp) = selected_project_name {
                         if &p.name != sp { continue; }
                     }
-                    
-                    let proj_commits: usize = p.authors.iter().map(|a| a.commits.len()).sum();
-                    *data.entry(date_str.clone()).or_insert(0) += proj_commits as u64;
+                    for a in &p.authors {
+                        for c in &a.commits {
+                            let key = match app.dashboard_resolution {
+                                crate::app::TimeResolution::Day => c.date.format("%Y-%m-%d").to_string(),
+                                crate::app::TimeResolution::Week => c.date.format("%Y-W%W").to_string(),
+                                crate::app::TimeResolution::Month => c.date.format("%Y-%m").to_string(),
+                            };
+                            *grouped_data.entry(key).or_default().entry(p.name.clone()).or_insert(0) += 1;
+                        }
+                    }
                 }
+            }
+            
+            let mut sorted_keys: Vec<String> = grouped_data.keys().cloned().collect();
+            sorted_keys.sort();
+            let display_keys: Vec<String> = sorted_keys.into_iter().rev().take(15).rev().collect();
+            
+            use ratatui::widgets::{BarGroup, Bar};
+            let mut bar_groups: Vec<ratatui::widgets::BarGroup> = Vec::new();
+            for key in &display_keys {
+                let p_map = &grouped_data[key];
+                let mut bars = Vec::new();
+                for (p_name, _) in &project_stats {
+                    if let Some(&count) = p_map.get(*p_name) {
+                        let color = proj_colors.get(*p_name).copied().unwrap_or(Color::Green);
+                        bars.push(Bar::default().value(count).style(Style::default().fg(color)));
+                    }
+                }
+                bar_groups.push(BarGroup::default().label(Line::from(key.as_str())).bars(&bars));
             }
             
             let mut most_active_repo = String::from("None");
@@ -334,10 +365,6 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 most_active_repo = best_repo.clone();
                 max_repo_commits = max_commits;
             }
-            
-            let mut sorted_data: Vec<(String, u64)> = data.into_iter().collect();
-            sorted_data.sort_by(|a, b| a.0.cmp(&b.0));
-            let display_data: Vec<(&str, u64)> = sorted_data.iter().rev().take(15).rev().map(|(k, v)| (k.as_str(), *v)).collect();
             
             let dashboard_layout = Layout::default()
                 .direction(Direction::Vertical)
@@ -400,20 +427,41 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             
             f.render_stateful_widget(table, dashboard_layout[1], &mut app.dashboard_list_state);
             
-            let barchart_title = if let Some(ref sp) = selected_project_name {
-                format!("Activity Timeline for '{}' (Commits per Day)", sp)
-            } else {
-                "Global Activity Timeline (Commits per Day)".to_string()
+            let barchart_title = match app.dashboard_resolution {
+                crate::app::TimeResolution::Day => "Activity Timeline (Commits per Day) | 't' to toggle resolution",
+                crate::app::TimeResolution::Week => "Activity Timeline (Commits per Week) | 't' to toggle resolution",
+                crate::app::TimeResolution::Month => "Activity Timeline (Commits per Month) | 't' to toggle resolution",
             };
             
-            let barchart = ratatui::widgets::BarChart::default()
-                .block(Block::default().title(barchart_title).borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)))
-                .data(&display_data)
-                .bar_width(12)
-                .bar_gap(2)
-                .value_style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD))
-                .label_style(Style::default().fg(Color::Cyan))
-                .bar_style(Style::default().fg(Color::Green));
+            let barchart_block_title = if let Some(ref sp) = selected_project_name {
+                format!("{} for '{}'", barchart_title, sp)
+            } else {
+                format!("Global {}", barchart_title)
+            };
+            
+            // Note: .data(bar_groups) passes a single reference or takes ownership depending on Ratatui version.
+            // Using .data(bar_groups) passes the iterator of BarGroups.
+            // But wait, the BarChart's .data() for BarGroup needs a reference sometimes. 
+            // In ratatui 0.25+, `BarGroup` implements the trait properly.
+            // If .data() expects `&'a [(&'a str, u64)]`, we cannot pass `Vec<BarGroup>`.
+            // Wait, ratatui's BarChart has a `data()` method, but does it accept `BarGroup` directly? 
+            // Yes, ratatui 0.26+ supports `.data(BarGroup)` directly if it's the `ratatui::widgets::BarChart::default().data(&display_data)`?
+            // Actually, `.data()` on BarChart has a generic bound.
+            // Let's use `.data(ratatui::widgets::BarGroup)`. Wait, we just pass the vector:
+            // `.data(ratatui::widgets::BarChart::default().data(bar_groups))` might not work if lifetimes don't match.
+            // But wait, ratatui's `BarGroup` expects a reference! Let's pass `&bar_groups`.
+            
+            // Wait, `data` takes `impl IntoIterator<Item = BarGroup>`.
+            let mut barchart = ratatui::widgets::BarChart::default()
+                .block(Block::default().title(barchart_block_title).borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)))
+                .bar_width(6) // narrower bars since there can be many projects side-by-side
+                .bar_gap(1)
+                .group_gap(3) // Gap between different dates
+                .value_style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD));
+            
+            for group in bar_groups {
+                barchart = barchart.data(group);
+            }
                 
             f.render_widget(barchart, dashboard_layout[2]);
         }

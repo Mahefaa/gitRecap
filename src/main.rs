@@ -258,6 +258,15 @@ fn run_app(
                         };
                         app.dashboard_list_state.select(Some(i));
                     }
+                    KeyCode::Char('t') => {
+                        app.dashboard_resolution = match app.dashboard_resolution {
+                            crate::app::TimeResolution::Day => crate::app::TimeResolution::Week,
+                            crate::app::TimeResolution::Week => crate::app::TimeResolution::Month,
+                            crate::app::TimeResolution::Month => crate::app::TimeResolution::Day,
+                        };
+                    }
+                    KeyCode::Char(':') => app.enter_input_mode(AppMode::Command),
+                    KeyCode::Char('/') => app.enter_input_mode(AppMode::Search(crate::app::SearchTarget::Projects)),
                     _ => {}
                 },
                 AppMode::Help => {
