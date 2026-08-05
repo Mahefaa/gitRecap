@@ -236,12 +236,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 
                 render_commits_list(f, app, commit_chunks[0]);
                 
-                use ansi_to_tui::IntoText;
-                let text = diff.into_text().unwrap_or_else(|_| ratatui::text::Text::raw("Failed to parse diff"));
-                
                 let diff_block = Block::default().title("Diff Viewer (PgUp/PgDown to scroll)").borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan));
                 
-                let p = Paragraph::new(text).block(diff_block).scroll((app.diff_scroll, 0));
+                let p = Paragraph::new(diff).block(diff_block).scroll((app.diff_scroll, 0));
                 f.render_widget(p, commit_chunks[1]);
             } else {
                 render_commits_list(f, app, main_chunks[1]);

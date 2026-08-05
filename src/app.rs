@@ -83,7 +83,7 @@ pub struct App {
     pub is_loading: bool,
     pub loading_rx: Option<std::sync::mpsc::Receiver<LoadingResult>>,
     pub hide_zero_commits: bool,
-    pub diff_content: Option<Vec<u8>>,
+    pub diff_content: Option<ratatui::text::Text<'static>>,
     pub diff_scroll: u16,
 }
 
@@ -617,7 +617,12 @@ impl App {
                                         .arg(commit_id)
                                         .current_dir(proj_path)
                                         .output() {
-                                            self.diff_content = Some(output.stdout);
+                                            use ansi_to_tui::IntoText;
+                                            if let Ok(text) = output.stdout.into_text() {
+                                                self.diff_content = Some(text);
+                                            } else {
+                                                self.diff_content = Some(ratatui::text::Text::raw("Failed to parse diff"));
+                                            }
                                             self.diff_scroll = 0;
                                         }
                                 }
