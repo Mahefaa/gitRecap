@@ -105,7 +105,7 @@ fn run_app(
                         }
                     }
                     KeyCode::Char('e') => {
-                        let _ = app.export_summary("summary.txt");
+                        app.trigger_export(false);
                     }
                     KeyCode::Char('v') => {
                         app.mode = AppMode::Dashboard;
@@ -167,16 +167,7 @@ fn run_app(
                             app.diff_scroll = app.diff_scroll.saturating_sub(5);
                         }
                         KeyCode::Char('e') => {
-                            app.mode = AppMode::InputExportPath;
-                            let date_str = chrono::Local::now().format("%Y-%m-%d").to_string();
-                            let default_filename = format!("{}.md", date_str);
-                            let initial_value = if let Some(path) = &app.config.default_export_path {
-                                let path = std::path::PathBuf::from(path).join(&default_filename);
-                                path.to_string_lossy().into_owned()
-                            } else {
-                                default_filename
-                            };
-                            app.input = Input::default().with_value(initial_value);
+                            app.trigger_export(false);
                         }
                         KeyCode::Char('c') => app.toggle_expand_from_commits_view(),
                         KeyCode::Char('/') => {
@@ -267,6 +258,9 @@ fn run_app(
                         KeyCode::Enter => {
                             // Can be extended to jump to commit later. For now, just exit.
                             app.cancel_input();
+                        }
+                        KeyCode::Char('e') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                            app.trigger_export(true);
                         }
                         KeyCode::Esc => {
                             app.fuzzy_results.clear();

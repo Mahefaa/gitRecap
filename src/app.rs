@@ -108,6 +108,7 @@ pub struct App {
     pub diff_content: Option<ratatui::text::Text<'static>>,
     pub diff_scroll: u16,
     pub timeline: Vec<TimelineDate>,
+    pub exporting_search: bool,
 }
 
 impl App {
@@ -144,6 +145,7 @@ impl App {
             diff_content: None,
             diff_scroll: 0,
             timeline: Vec::new(),
+            exporting_search: false,
         };
         app.current_profile = app.config.get_active_profile();
         app.sources = app.current_profile.sources.clone();
@@ -158,6 +160,20 @@ impl App {
         
         app.scan_sources();
         app
+    }
+
+    pub fn trigger_export(&mut self, is_search: bool) {
+        self.exporting_search = is_search;
+        self.mode = AppMode::InputExportPath;
+        let date_str = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let default_filename = format!("{}.md", date_str);
+        let initial_value = if let Some(path) = &self.config.default_export_path {
+            let path = std::path::PathBuf::from(path).join(&default_filename);
+            path.to_string_lossy().into_owned()
+        } else {
+            default_filename
+        };
+        self.input = tui_input::Input::default().with_value(initial_value);
     }
 
     pub fn check_background_tasks(&mut self) -> bool {
@@ -967,6 +983,8 @@ impl App {
         
         let projects = self.projects.clone();
         let timeline = self.timeline.clone();
+        let fuzzy_results = self.fuzzy_results.clone();
+        let exporting_search = self.exporting_search;
         
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
@@ -981,10 +999,18 @@ impl App {
                     if !proj.enabled || proj.dates.is_empty() { continue; }
                     
                     let mut commit_ids = Vec::new();
-                    for date_group in &proj.dates {
-                        for branch in &date_group.branches {
-                            for c in &branch.commits {
-                                commit_ids.push(c.id.clone());
+                    if exporting_search {
+                        for res in &fuzzy_results {
+                            if res.project_name == proj.name {
+                                commit_ids.push(res.commit_id.clone());
+                            }
+                        }
+                    } else {
+                        for date_group in &proj.dates {
+                            for branch in &date_group.branches {
+                                for c in &branch.commits {
+                                    commit_ids.push(c.id.clone());
+                                }
                             }
                         }
                     }
@@ -1039,35 +1065,49 @@ impl App {
                 
                 // Divide and conquer: Generate markdown for each date in parallel
                 use rayon::prelude::*;
-                let date_strings: Vec<String> = timeline.par_iter().map(|date_group| {
-                    let mut date_content = format!("## Date: {}\n\n", date_group.date);
-                    
-                    for proj in &date_group.projects {
-                        let mut proj_has_commits = false;
-                        let mut proj_content = format!("### Repository: {}\n\n", proj.name);
+                let date_strings: Vec<String> = if exporting_search {
+                    fuzzy_results.par_iter().map(|res| {
+                        let mut content = format!("### Project: {} | Author: {}\n", res.project_name, res.commit_author);
+                        content.push_str(&format!("- `{}` {}\n", res.commit_id.chars().take(7).collect::<String>(), res.commit_message));
+                        if let Some(files) = all_diffs.get(&res.commit_id) {
+                            for line in files.lines() {
+                                content.push_str(&format!("  - `{}`\n", line));
+                            }
+                        }
+                        content.push('\n');
+                        content
+                    }).collect()
+                } else {
+                    timeline.par_iter().map(|date_group| {
+                        let mut date_content = format!("## Date: {}\n\n", date_group.date);
                         
-                        for author_group in &proj.authors {
-                            if author_group.commits.is_empty() { continue; }
-                            proj_has_commits = true;
-                            proj_content.push_str(&format!("#### Author: `{}`\n\n", author_group.name));
+                        for proj in &date_group.projects {
+                            let mut proj_has_commits = false;
+                            let mut proj_content = format!("### Repository: {}\n\n", proj.name);
                             
-                            for c in &author_group.commits {
-                                proj_content.push_str(&format!("- `{}` {}\n", c.id.chars().take(7).collect::<String>(), c.message));
+                            for author_group in &proj.authors {
+                                if author_group.commits.is_empty() { continue; }
+                                proj_has_commits = true;
+                                proj_content.push_str(&format!("#### Author: `{}`\n\n", author_group.name));
                                 
-                                if let Some(files) = all_diffs.get(&c.id) {
-                                    for line in files.lines() {
-                                        proj_content.push_str(&format!("  - `{}`\n", line));
+                                for c in &author_group.commits {
+                                    proj_content.push_str(&format!("- `{}` {}\n", c.id.chars().take(7).collect::<String>(), c.message));
+                                    
+                                    if let Some(files) = all_diffs.get(&c.id) {
+                                        for line in files.lines() {
+                                            proj_content.push_str(&format!("  - `{}`\n", line));
+                                        }
                                     }
                                 }
+                                proj_content.push('\n');
                             }
-                            proj_content.push('\n');
+                            if proj_has_commits {
+                                date_content.push_str(&proj_content);
+                            }
                         }
-                        if proj_has_commits {
-                            date_content.push_str(&proj_content);
-                        }
-                    }
-                    date_content
-                }).collect();
+                        date_content
+                    }).collect()
+                };
                 
                 // Reunite
                 let mut file = File::create(&path).map_err(|e| e.to_string())?;
