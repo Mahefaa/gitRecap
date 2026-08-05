@@ -108,7 +108,7 @@ pub struct App {
     pub diff_content: Option<ratatui::text::Text<'static>>,
     pub diff_scroll: u16,
     pub timeline: Vec<TimelineDate>,
-    pub exporting_search: bool,
+    pub fuzzy_filter: String,
 }
 
 impl App {
@@ -145,7 +145,7 @@ impl App {
             diff_content: None,
             diff_scroll: 0,
             timeline: Vec::new(),
-            exporting_search: false,
+            fuzzy_filter: String::new(),
         };
         app.current_profile = app.config.get_active_profile();
         app.sources = app.current_profile.sources.clone();
@@ -162,8 +162,7 @@ impl App {
         app
     }
 
-    pub fn trigger_export(&mut self, is_search: bool) {
-        self.exporting_search = is_search;
+    pub fn trigger_export(&mut self) {
         self.mode = AppMode::InputExportPath;
         let date_str = chrono::Local::now().format("%Y-%m-%d").to_string();
         let default_filename = format!("{}.md", date_str);
@@ -265,16 +264,32 @@ impl App {
         }
 
         let projects_to_show: Vec<_> = self.projects.iter().filter(|p| p.enabled).collect();
+        let use_filter = !self.fuzzy_filter.is_empty();
+        let matcher = fuzzy_matcher::skim::SkimMatcherV2::default();
+        let query = self.fuzzy_filter.to_lowercase();
 
         for proj in projects_to_show {
             for date_group in &proj.dates {
-                let proj_map = agg.entry(date_group.date.clone()).or_insert_with(BTreeMap::new);
-                let author_map = proj_map.entry(proj.name.clone()).or_insert_with(BTreeMap::new);
-                
+                let mut proj_map_temp = BTreeMap::new();
                 for branch in &date_group.branches {
                     for commit in &branch.commits {
-                        let commit_list = author_map.entry(commit.author.clone()).or_insert_with(Vec::new);
+                        if use_filter {
+                            use fuzzy_matcher::FuzzyMatcher;
+                            let target = format!("{} {} {} {}", proj.name, commit.author, commit.id, commit.message);
+                            if matcher.fuzzy_match(&target, &query).is_none() {
+                                continue;
+                            }
+                        }
+                        let commit_list = proj_map_temp.entry(commit.author.clone()).or_insert_with(Vec::new);
                         commit_list.push(commit.clone());
+                    }
+                }
+                if !proj_map_temp.is_empty() {
+                    let proj_map = agg.entry(date_group.date.clone()).or_insert_with(BTreeMap::new);
+                    let author_map = proj_map.entry(proj.name.clone()).or_insert_with(BTreeMap::new);
+                    for (author, commits) in proj_map_temp {
+                        let commit_list = author_map.entry(author).or_insert_with(Vec::new);
+                        commit_list.extend(commits);
                     }
                 }
             }
@@ -980,11 +995,8 @@ impl App {
         let (tx, rx) = std::sync::mpsc::channel();
         self.is_loading = true;
         self.loading_rx = Some(rx);
-        
         let projects = self.projects.clone();
         let timeline = self.timeline.clone();
-        let fuzzy_results = self.fuzzy_results.clone();
-        let exporting_search = self.exporting_search;
         
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
@@ -992,29 +1004,24 @@ impl App {
                 use std::fs::File;
                 use std::io::Write;
                 
+                let mut project_commits: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+                for date_group in &timeline {
+                    for proj in &date_group.projects {
+                        for author_group in &proj.authors {
+                            for c in &author_group.commits {
+                                project_commits.entry(proj.name.clone()).or_default().push(c.id.clone());
+                            }
+                        }
+                    }
+                }
+                
                 let mut join_set = tokio::task::JoinSet::new();
                 let mut idx = 0;
                 
                 for proj in &projects {
                     if !proj.enabled || proj.dates.is_empty() { continue; }
                     
-                    let mut commit_ids = Vec::new();
-                    if exporting_search {
-                        for res in &fuzzy_results {
-                            if res.project_name == proj.name {
-                                commit_ids.push(res.commit_id.clone());
-                            }
-                        }
-                    } else {
-                        for date_group in &proj.dates {
-                            for branch in &date_group.branches {
-                                for c in &branch.commits {
-                                    commit_ids.push(c.id.clone());
-                                }
-                            }
-                        }
-                    }
-                    
+                    let commit_ids = project_commits.get(&proj.name).cloned().unwrap_or_default();
                     if commit_ids.is_empty() { continue; }
                     
                     let proj_path = proj.path.clone();
@@ -1065,49 +1072,35 @@ impl App {
                 
                 // Divide and conquer: Generate markdown for each date in parallel
                 use rayon::prelude::*;
-                let date_strings: Vec<String> = if exporting_search {
-                    fuzzy_results.par_iter().map(|res| {
-                        let mut content = format!("### Project: {} | Author: {}\n", res.project_name, res.commit_author);
-                        content.push_str(&format!("- `{}` {}\n", res.commit_id.chars().take(7).collect::<String>(), res.commit_message));
-                        if let Some(files) = all_diffs.get(&res.commit_id) {
-                            for line in files.lines() {
-                                content.push_str(&format!("  - `{}`\n", line));
-                            }
-                        }
-                        content.push('\n');
-                        content
-                    }).collect()
-                } else {
-                    timeline.par_iter().map(|date_group| {
-                        let mut date_content = format!("## Date: {}\n\n", date_group.date);
+                let date_strings: Vec<String> = timeline.par_iter().map(|date_group| {
+                    let mut date_content = format!("## Date: {}\n\n", date_group.date);
+                    
+                    for proj in &date_group.projects {
+                        let mut proj_has_commits = false;
+                        let mut proj_content = format!("### Repository: {}\n\n", proj.name);
                         
-                        for proj in &date_group.projects {
-                            let mut proj_has_commits = false;
-                            let mut proj_content = format!("### Repository: {}\n\n", proj.name);
+                        for author_group in &proj.authors {
+                            if author_group.commits.is_empty() { continue; }
+                            proj_has_commits = true;
+                            proj_content.push_str(&format!("#### Author: `{}`\n\n", author_group.name));
                             
-                            for author_group in &proj.authors {
-                                if author_group.commits.is_empty() { continue; }
-                                proj_has_commits = true;
-                                proj_content.push_str(&format!("#### Author: `{}`\n\n", author_group.name));
+                            for c in &author_group.commits {
+                                proj_content.push_str(&format!("- `{}` {}\n", c.id.chars().take(7).collect::<String>(), c.message));
                                 
-                                for c in &author_group.commits {
-                                    proj_content.push_str(&format!("- `{}` {}\n", c.id.chars().take(7).collect::<String>(), c.message));
-                                    
-                                    if let Some(files) = all_diffs.get(&c.id) {
-                                        for line in files.lines() {
-                                            proj_content.push_str(&format!("  - `{}`\n", line));
-                                        }
+                                if let Some(files) = all_diffs.get(&c.id) {
+                                    for line in files.lines() {
+                                        proj_content.push_str(&format!("  - `{}`\n", line));
                                     }
                                 }
-                                proj_content.push('\n');
                             }
-                            if proj_has_commits {
-                                date_content.push_str(&proj_content);
-                            }
+                            proj_content.push('\n');
                         }
-                        date_content
-                    }).collect()
-                };
+                        if proj_has_commits {
+                            date_content.push_str(&proj_content);
+                        }
+                    }
+                    date_content
+                }).collect();
                 
                 // Reunite
                 let mut file = File::create(&path).map_err(|e| e.to_string())?;

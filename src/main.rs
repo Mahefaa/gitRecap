@@ -105,7 +105,7 @@ fn run_app(
                         }
                     }
                     KeyCode::Char('e') => {
-                        app.trigger_export(false);
+                        app.trigger_export();
                     }
                     KeyCode::Char('v') => {
                         app.mode = AppMode::Dashboard;
@@ -167,7 +167,7 @@ fn run_app(
                             app.diff_scroll = app.diff_scroll.saturating_sub(5);
                         }
                         KeyCode::Char('e') => {
-                            app.trigger_export(false);
+                            app.trigger_export();
                         }
                         KeyCode::Char('c') => app.toggle_expand_from_commits_view(),
                         KeyCode::Char('/') => {
@@ -256,11 +256,9 @@ fn run_app(
                 AppMode::FuzzyFinder => {
                     match key.code {
                         KeyCode::Enter => {
-                            // Can be extended to jump to commit later. For now, just exit.
+                            app.fuzzy_filter = app.input.value().to_string();
+                            app.build_timeline();
                             app.cancel_input();
-                        }
-                        KeyCode::Char('e') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
-                            app.trigger_export(true);
                         }
                         KeyCode::Esc => {
                             app.fuzzy_results.clear();
