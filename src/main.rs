@@ -60,6 +60,14 @@ fn run_app(
             needs_redraw = false;
         }
 
+        if let Some(t) = app.last_search_typing {
+            if t.elapsed() >= std::time::Duration::from_millis(300) {
+                app.apply_search_debounce();
+                app.last_search_typing = None;
+                needs_redraw = true;
+            }
+        }
+
         if event::poll(std::time::Duration::from_millis(50))? {
             loop {
                 match event::read()? {
@@ -127,8 +135,7 @@ fn run_app(
                     }
                     KeyCode::Char('?') => app.mode = AppMode::Help,
                     KeyCode::Char('/') => {
-                        app.enter_input_mode(AppMode::FuzzyFinder);
-                        app.execute_fuzzy_search();
+                        app.enter_input_mode(AppMode::Search(crate::app::SearchTarget::Projects));
                     }
                     _ => {}
                 },
@@ -171,8 +178,7 @@ fn run_app(
                         }
                         KeyCode::Char('c') => app.toggle_expand_from_commits_view(),
                         KeyCode::Char('/') => {
-                            app.enter_input_mode(AppMode::FuzzyFinder);
-                            app.execute_fuzzy_search();
+                            app.enter_input_mode(AppMode::Search(crate::app::SearchTarget::Commits));
                         }
                         KeyCode::Char('E') => {
                             if let Some(idx) = app.commit_list_state.selected() {
@@ -253,36 +259,31 @@ fn run_app(
                         }
                     }
                 },
-                AppMode::FuzzyFinder => {
+                AppMode::Search(target) => {
                     match key.code {
-                        KeyCode::Enter => {
-                            app.fuzzy_filter = app.input.value().to_string();
-                            app.build_timeline();
+                        KeyCode::Enter | KeyCode::Esc => {
+                            if key.code == KeyCode::Esc {
+                                if target == crate::app::SearchTarget::Projects {
+                                    app.project_search.clear();
+                                    app.update_visible_projects();
+                                } else {
+                                    app.fuzzy_filter.clear();
+                                    app.build_timeline();
+                                }
+                            } else {
+                                // apply final
+                                app.apply_search_debounce();
+                            }
                             app.cancel_input();
                         }
-                        KeyCode::Esc => {
-                            app.fuzzy_results.clear();
-                            app.cancel_input();
-                        }
-                        KeyCode::Down | KeyCode::Char('j') => {
-                            if !app.fuzzy_results.is_empty() {
-                                let current = app.fuzzy_list_state.selected().unwrap_or(0);
-                                if current < app.fuzzy_results.len().saturating_sub(1) {
-                                    app.fuzzy_list_state.select(Some(current + 1));
-                                }
-                            }
-                        }
-                        KeyCode::Up | KeyCode::Char('k') => {
-                            if !app.fuzzy_results.is_empty() {
-                                let current = app.fuzzy_list_state.selected().unwrap_or(0);
-                                if current > 0 {
-                                    app.fuzzy_list_state.select(Some(current - 1));
-                                }
-                            }
-                        }
+                        KeyCode::Down | KeyCode::Char('j') => app.next_item(),
+                        KeyCode::Up | KeyCode::Char('k') => app.previous_item(),
                         _ => {
+                            let old = app.input.value().to_string();
                             app.input.handle_event(&Event::Key(key));
-                            app.execute_fuzzy_search();
+                            if old != app.input.value() {
+                                app.last_search_typing = Some(std::time::Instant::now());
+                            }
                         }
                     }
                 },

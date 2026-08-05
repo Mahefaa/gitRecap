@@ -8,6 +8,7 @@ use tui_input::Input;
 use crate::config::{AppConfig, AppProfile};
 use crate::file_explorer::FileExplorerState;
 
+#[derive(Clone, PartialEq)]
 pub enum AppMode {
     Normal,
     Details,
@@ -21,11 +22,17 @@ pub enum AppMode {
     ExplorerJumpPath,
     InputBranch,
     CommitsView,
-    FuzzyFinder,
+    Search(SearchTarget),
     Command,
     ConfirmQuit,
     Help,
     Dashboard,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum SearchTarget {
+    Projects,
+    Commits,
 }
 
 pub enum LoadingResult {
@@ -67,24 +74,11 @@ pub struct TimelineAuthor {
     pub commits: Vec<crate::git_utils::GitCommit>,
 }
 
-#[derive(Clone)]
-pub struct FuzzyResult {
-    pub project_name: String,
-    pub branch_name: String,
-    pub commit_id: String,
-    pub commit_message: String,
-    pub commit_author: String,
-    pub commit_date: String,
-    pub score: i64,
-}
-
 pub struct App {
     pub author_filter: String,
     pub date_start_filter: chrono::DateTime<Local>,
     pub date_end_filter: chrono::DateTime<Local>,
     pub branch_filter: String,
-    pub fuzzy_results: Vec<FuzzyResult>,
-    pub fuzzy_list_state: ListState,
     pub projects_area: Option<Rect>,
     pub commits_area: Option<Rect>,
     pub commit_list_map: Vec<(usize, Option<usize>, Option<usize>, Option<usize>)>,
@@ -109,6 +103,10 @@ pub struct App {
     pub diff_scroll: u16,
     pub timeline: Vec<TimelineDate>,
     pub fuzzy_filter: String,
+    
+    pub project_search: String,
+    pub visible_projects: Vec<usize>,
+    pub last_search_typing: Option<std::time::Instant>,
 }
 
 impl App {
@@ -120,8 +118,6 @@ impl App {
             date_start_filter: today_start,
             date_end_filter: today_end,
             branch_filter: String::new(),
-            fuzzy_results: Vec::new(),
-            fuzzy_list_state: ListState::default(),
             projects_area: None,
             commits_area: None,
             commit_list_map: Vec::new(),
@@ -146,6 +142,9 @@ impl App {
             diff_scroll: 0,
             timeline: Vec::new(),
             fuzzy_filter: String::new(),
+            project_search: String::new(),
+            visible_projects: Vec::new(),
+            last_search_typing: None,
         };
         app.current_profile = app.config.get_active_profile();
         app.sources = app.current_profile.sources.clone();
@@ -243,6 +242,57 @@ impl App {
         if updated {
             self.config.update_active_profile(self.current_profile.clone());
             self.scan_sources();
+        }
+    }
+    
+    pub fn update_visible_projects(&mut self) {
+        let matcher = fuzzy_matcher::skim::SkimMatcherV2::default();
+        let query = self.project_search.to_lowercase();
+        let use_filter = !query.is_empty();
+        
+        let mut visible = Vec::new();
+        for (idx, p) in self.projects.iter().enumerate() {
+            if use_filter {
+                use fuzzy_matcher::FuzzyMatcher;
+                if matcher.fuzzy_match(&p.name, &query).is_none() {
+                    continue;
+                }
+            }
+            visible.push(idx);
+        }
+        self.visible_projects = visible;
+        
+        if let Some(selected) = self.selected_project_idx {
+            if !self.visible_projects.contains(&selected) {
+                self.selected_project_idx = self.visible_projects.first().copied();
+                if let Some(s) = self.selected_project_idx {
+                    if let Some(pos) = self.visible_projects.iter().position(|&x| x == s) {
+                        self.project_list_state.select(Some(pos));
+                    }
+                } else {
+                    self.project_list_state.select(None);
+                }
+            }
+        }
+    }
+    
+    pub fn apply_search_debounce(&mut self) {
+        if let AppMode::Search(target) = self.mode {
+            let val = self.input.value().to_string();
+            match target {
+                SearchTarget::Projects => {
+                    if self.project_search != val {
+                        self.project_search = val;
+                        self.update_visible_projects();
+                    }
+                },
+                SearchTarget::Commits => {
+                    if self.fuzzy_filter != val {
+                        self.fuzzy_filter = val;
+                        self.build_timeline();
+                    }
+                }
+            }
         }
     }
 
@@ -638,18 +688,19 @@ impl App {
 
     pub fn next_item(&mut self) {
         match self.mode {
-            AppMode::Normal => {
-                let i = match self.project_list_state.selected() {
-                    Some(i) => if i >= self.projects.len().saturating_sub(1) { 0 } else { i + 1 },
-                    None => 0,
-                };
-                if !self.projects.is_empty() {
+            AppMode::Normal | AppMode::Search(SearchTarget::Projects) => {
+                if !self.visible_projects.is_empty() {
+                    let limit = self.visible_projects.len().saturating_sub(1);
+                    let i = match self.project_list_state.selected() {
+                        Some(i) => if i >= limit { 0 } else { i + 1 },
+                        None => 0,
+                    };
                     self.project_list_state.select(Some(i));
-                    self.selected_project_idx = Some(i);
+                    self.selected_project_idx = Some(self.visible_projects[i]);
                     self.commit_list_state.select(None);
                 }
             }
-            AppMode::CommitsView | AppMode::Details => {
+            AppMode::CommitsView | AppMode::Details | AppMode::Search(SearchTarget::Commits) => {
                 let limit = self.commit_list_map.len().saturating_sub(1);
                 let i = match self.commit_list_state.selected() {
                     Some(i) => if i >= limit { 0 } else { i + 1 },
@@ -675,18 +726,19 @@ impl App {
 
     pub fn previous_item(&mut self) {
         match self.mode {
-            AppMode::Normal => {
-                let i = match self.project_list_state.selected() {
-                    Some(i) => if i == 0 { self.projects.len().saturating_sub(1) } else { i - 1 },
-                    None => 0,
-                };
-                if !self.projects.is_empty() {
+            AppMode::Normal | AppMode::Search(SearchTarget::Projects) => {
+                if !self.visible_projects.is_empty() {
+                    let limit = self.visible_projects.len().saturating_sub(1);
+                    let i = match self.project_list_state.selected() {
+                        Some(i) => if i == 0 { limit } else { i - 1 },
+                        None => 0,
+                    };
                     self.project_list_state.select(Some(i));
-                    self.selected_project_idx = Some(i);
+                    self.selected_project_idx = Some(self.visible_projects[i]);
                     self.commit_list_state.select(None);
                 }
             }
-            AppMode::Details | AppMode::CommitsView => {
+            AppMode::Details | AppMode::CommitsView | AppMode::Search(SearchTarget::Commits) => {
                 let limit = self.commit_list_map.len().saturating_sub(1);
                 let i = match self.commit_list_state.selected() {
                     Some(i) => if i == 0 { limit } else { i - 1 },
@@ -778,11 +830,11 @@ impl App {
 
     pub fn enter_input_mode(&mut self, mode: AppMode) {
         match mode {
-            AppMode::InputAuthor | AppMode::InputDate | AppMode::InputProfile | AppMode::FileExplorer | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::FuzzyFinder | AppMode::Command => {
+            AppMode::InputAuthor | AppMode::InputDate | AppMode::InputProfile | AppMode::FileExplorer | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::Command | AppMode::Search(_) => {
                 self.input.reset();
-                self.mode = mode;
+                self.mode = mode.clone();
             }
-            _ => { self.mode = mode; }
+            _ => { self.mode = mode.clone(); }
         }
         match self.mode {
             AppMode::InputAuthor => {
@@ -795,10 +847,13 @@ impl App {
             AppMode::InputBranch => {
                 self.input = self.input.clone().with_value(self.branch_filter.clone());
             },
-            AppMode::FuzzyFinder => {
-                self.input = self.input.clone().with_value(String::new());
-                self.fuzzy_results.clear();
-                self.fuzzy_list_state.select(None);
+            AppMode::Search(target) => {
+                let val = match target {
+                    SearchTarget::Projects => self.project_search.clone(),
+                    SearchTarget::Commits => self.fuzzy_filter.clone(),
+                };
+                self.input = self.input.clone().with_value(val);
+                self.last_search_typing = None;
             },
             AppMode::InputProfile => {
                 self.input = self.input.clone().with_value(self.current_profile.name.clone());
@@ -1021,7 +1076,7 @@ impl App {
                 for proj in &projects {
                     if !proj.enabled || proj.dates.is_empty() { continue; }
                     
-                    let commit_ids = project_commits.get(&proj.name).cloned().unwrap_or_default();
+                    let commit_ids = project_commits.get(&proj.name).cloned().unwrap_or_default().clone();
                     if commit_ids.is_empty() { continue; }
                     
                     let proj_path = proj.path.clone();
@@ -1144,55 +1199,7 @@ impl App {
             }
         }
     }
-
-    pub fn execute_fuzzy_search(&mut self) {
-        use fuzzy_matcher::FuzzyMatcher;
-        use fuzzy_matcher::skim::SkimMatcherV2;
-        
-        let matcher = SkimMatcherV2::default();
-        let query = self.input.value().to_string();
-        
-        self.fuzzy_results.clear();
-        
-        if query.is_empty() {
-            self.fuzzy_list_state.select(None);
-            return;
-        }
-        
-        for proj in &self.projects {
-            if !proj.enabled { continue; }
-            for date_group in &proj.dates {
-                for branch in &date_group.branches {
-                    for commit in &branch.commits {
-                        let search_text = format!("{} {} {}", commit.id, commit.author, commit.message);
-                        if let Some(score) = matcher.fuzzy_match(&search_text, &query) {
-                            self.fuzzy_results.push(FuzzyResult {
-                                project_name: proj.name.clone(),
-                                branch_name: branch.name.clone(),
-                                commit_id: commit.id.clone(),
-                                commit_message: commit.message.clone(),
-                                commit_author: commit.author.clone(),
-                                commit_date: commit.date.format("%Y-%m-%d %H:%M").to_string(),
-                                score,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        
-        self.fuzzy_results.sort_by(|a, b| b.score.cmp(&a.score));
-        
-        if self.fuzzy_results.len() > 100 {
-            self.fuzzy_results.truncate(100);
-        }
-        
-        if !self.fuzzy_results.is_empty() {
-            self.fuzzy_list_state.select(Some(0));
-        } else {
-            self.fuzzy_list_state.select(None);
-        }
-    }
+    // fuzzy search logic was removed in favor of live timeline and project filtering
 }
 
 fn parse_date_input(input: &str) -> Option<(chrono::DateTime<Local>, chrono::DateTime<Local>)> {
