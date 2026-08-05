@@ -1,0 +1,236 @@
+# Git Recap Summary
+
+## Repository: gitRecap
+
+### 2026-08-03
+
+#### Branch: `main`
+
+- **[Mahefaa]** `56cca4e` fix: rewrite export to AI-friendly markdown and include modified files
+  - `src/app.rs`
+- **[Mahefaa]** `e3e0418` feat: implement split screen commit diff viewer and center modals
+  - `Cargo.lock`
+  - `Cargo.toml`
+  - `HELP.md`
+  - `ROADMAP.md`
+  - `src/app.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `2b48716` feat: implement interactive history rewrite shortcut
+  - `HELP.md`
+  - `ROADMAP.md`
+  - `src/main.rs`
+- **[Mahefaa]** `406a6a9` feat: implement fzf-like global fuzzy finder
+  - `Cargo.lock`
+  - `Cargo.toml`
+  - `ROADMAP.md`
+  - `src/app.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `b98b7de` feat: complete vim command suite implementation
+  - `HELP.md`
+  - `ROADMAP.md`
+  - `src/app.rs`
+- **[Mahefaa]** `bf597de` docs: comprehensively update HELP.md and mark performance roadmap items complete
+  - `HELP.md`
+  - `ROADMAP.md`
+  - `src/app.rs`
+  - `src/main.rs`
+- **[Mahefaa]** `ae0f37f` style: remove unused imports
+  - `src/app.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `e8e916e` perf: buffer terminal stdout to minimize syscalls and drastically improve rendering speed on legacy windows consoles
+  - `src/main.rs`
+- **[Mahefaa]** `9f1696d` perf: implement smart redrawing to eliminate idle cpu usage and terminal pipeline lag
+  - `src/app.rs`
+  - `src/main.rs`
+- **[Mahefaa]** `9f9d8dc` feat: persist filters to config profiles and add help guide
+  - `HELP.md`
+  - `src/app.rs`
+  - `src/config.rs`
+- **[Mahefaa]** `b0877be` chore: remove unused clap dependency to reduce binary size and compile time
+  - `Cargo.lock`
+  - `Cargo.toml`
+- **[Mahefaa]** `a1de06d` perf: eliminate unnecessary allocations in ui render loop during commit search
+  - `src/ui.rs`
+- **[Mahefaa]** `d9575bb` perf: utilize rayon for parallel multi-threading processing of repositories
+  - `Cargo.lock`
+  - `Cargo.toml`
+  - `ROADMAP.md`
+  - `src/app.rs`
+- **[Mahefaa]** `4a24a16` perf: batch process input events to eliminate render loop lag on Windows
+  - `src/git_utils.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `f7c7ca9` refactor: Add nested date->branch grouping, vim commands, quit/help modals, and formatting improvements
+  - `complaints.txt`
+  - `src/app.rs`
+  - `src/git_utils.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `d1369f3` style(ui): mark unpushed commits with an asterisk instead of a tag
+  - `src/ui.rs`
+- **[Mahefaa]** `4156d50` style(ui): clean up UI headers by removing labels and group author directly within commit lines
+  - `src/ui.rs`
+- **[Mahefaa]** `8afcb01` feat(ui): allow toggling project collapse from within the CommitsView using 'c'
+  - `src/app.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `3945be9` fix(ui): resolve 'k' navigation bug in CommitsView and add dynamic list highlighting
+  - `src/app.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `d8b95a3` feat(core): enhance date parsing with 'since' keyword, 'yesterday', and direct month string mapping
+  - `src/app.rs`
+- **[Mahefaa]** `b0d1645` fix(core): resolve file explorer crash on search by caching entries, implement live filtering for commit search
+  - `src/app.rs`
+  - `src/file_explorer.rs`
+  - `src/main.rs`
+- **[Mahefaa]** `40a0aaa` feat(core): add mouse support for switching views and selecting projects
+  - `src/app.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `a2e802b` feat(core): implement global commits view, alt-left/right navigation, and commit search
+  - `src/app.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `8d96114` feat(core): implement remove all projects functionality via D shortcut
+  - `src/app.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `58a1ee3` feat(core): fix add source bug, implement branch filter, and add toggle all projects shortcut
+  - `src/app.rs`
+  - `src/git_utils.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `f98c2ca` feat(core): fix windows duplicate input bug, implement incremental loading, and enhance ui commit grouping and collapsing
+  - `src/app.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `85217dc` fix(git): read author date instead of committer date for commits display and filtering
+  - `src/git_utils.rs`
+- **[Mahefaa]** `40bfa9b` fix(core): seamlessly handle windows backslashes in user path inputs
+  - `src/app.rs`
+- **[Mahefaa]** `7d0709f` fix(core): fallback to USERPROFILE for windows users missing HOME env var
+  - `src/config.rs`
+- **[Mahefaa]** `4ab41de` feat(ui): display full date alongside time for commits
+  - `src/ui.rs`
+- **[Mahefaa]** `f4f5c9b` feat(core): implement async background data loading with UI spinner
+  - `src/app.rs`
+  - `src/git_utils.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `690fb62` perf: drastically optimize huge date range parsing and limit tui rendering size
+  - `src/app.rs`
+  - `src/git_utils.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `5713ef2` fix(core): allow re-adding projects that were previously removed
+  - `src/app.rs`
+- **[Mahefaa]** `ef86c38` fix: resolve file explorer lag by optimizing walkdir and enhance UI to show all enabled commits in normal mode
+  - `src/app.rs`
+  - `src/git_utils.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `c905831` feat(ui): add last commit info and branch name to git directories in file explorer
+  - `src/file_explorer.rs`
+  - `src/git_utils.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `a9d2773` docs: add credits section to README
+  - `README.md`
+- **[Mahefaa]** `b7058f9` docs: add skills directory with development guidelines for future devs
+  - `skills/architecture.md`
+  - `skills/ratatui.md`
+  - `skills/rust-pro.md`
+- **[Mahefaa]** `313b030` fix(ui): always display date filter as range from today to today by default
+  - `src/app.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `cd77098` feat(ui): vim motions, mark navigation, manual path input in file explorer
+  - `src/app.rs`
+  - `src/file_explorer.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `878a4a4` feat(git): add interactive push and force-push capabilities with confirmation modal
+  - `src/app.rs`
+  - `src/main.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `bb1ca9a` feat(ui): add dot keybinding to add current directory as source
+  - `src/app.rs`
+  - `src/git_utils.rs`
+  - `src/main.rs`
+- **[Mahefaa]** `40a2463` refactor: apply rust-expert best practices
+  - `src/app.rs`
+  - `src/config.rs`
+  - `src/file_explorer.rs`
+  - `src/git_utils.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `a248ff6` feat(date): add date range filtering capability
+  - `.github/workflows/ci.yml`
+  - `.github/workflows/release.yml`
+  - `src/app.rs`
+  - `src/git_utils.rs`
+  - `src/ui.rs`
+- **[Mahefaa]** `dd9dc39` feat(ui): implement ratatui based rendering and layouts
+  - `src/ui.rs`
+- **[Mahefaa]** `15a274c` feat(ui): implement file explorer with search
+  - `src/file_explorer.rs`
+- **[Mahefaa]** `4ac34db` feat(core): setup crossterm event loop and vim keybindings
+  - `src/main.rs`
+- **[Mahefaa]** `850718e` feat(state): manage global app state and interactions
+  - `src/app.rs`
+- **[Mahefaa]** `df1102e` feat(config): add persistent profiles configuration
+  - `src/config.rs`
+- **[Mahefaa]** `977f485` feat(git): add commit extraction and branch grouping
+  - `src/git_utils.rs`
+- **[Mahefaa]** `311f32d` chore: initial commit
+- **[Mahefaa]** `c836b84` build: initialize rust project with ratatui and git2
+  - `Cargo.lock`
+  - `Cargo.toml`
+- **[Mahefaa]** `0698307` docs: add readme, ai contributing guide, and project doc
+  - `.gitignore`
+  - `CONTRIBUTING_AI.md`
+  - `README.md`
+  - `git-recap.md`
+
+## Repository: poja-api
+
+### 2026-08-03
+
+#### Branch: `fix-poja-conf-handler-overengineering`
+
+- **[Mahefaa]** `ca5f75b` chore: lelena
+  - `cmd.sh`
+  - `doc/api-bundled.yml`
+  - `feedback-tanjonaaa-statemachine.md`
+  - `patch.diff`
+  - `refactoring-changes.md`
+  - `src/main/java/api/poja/io/service/pricing/calculator/impl/PricingCalculatorFacade.java`
+  - `src/main/java/api/poja/io/service/workflows/appImportState/ApplicationImportStateMachine.java`
+  - `start-mcp-production.sh`
+  - `start-mcp-server.sh`
+
+#### Branch: `poja_conf`
+
+- **[YumeT023]** `7a26243` refactor: PojaConfUploadedHandlerFacade.java
+  - `src/main/java/api/poja/io/service/pojaConfHandler/PojaConfUploadedHandlerFacade.java`
+
+## Repository: poja-api
+
+### 2026-08-03
+
+#### Branch: `fix-poja-conf-handler-overengineering`
+
+- **[Mahefaa]** `ca5f75b` chore: lelena
+  - `cmd.sh`
+  - `doc/api-bundled.yml`
+  - `feedback-tanjonaaa-statemachine.md`
+  - `patch.diff`
+  - `refactoring-changes.md`
+  - `src/main/java/api/poja/io/service/pricing/calculator/impl/PricingCalculatorFacade.java`
+  - `src/main/java/api/poja/io/service/workflows/appImportState/ApplicationImportStateMachine.java`
+  - `start-mcp-production.sh`
+  - `start-mcp-server.sh`
+
+#### Branch: `poja_conf`
+
+- **[YumeT023]** `7a26243` refactor: PojaConfUploadedHandlerFacade.java
+  - `src/main/java/api/poja/io/service/pojaConfHandler/PojaConfUploadedHandlerFacade.java`
+

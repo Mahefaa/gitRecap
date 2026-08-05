@@ -164,12 +164,8 @@ fn run_app(
                             app.diff_scroll = app.diff_scroll.saturating_sub(5);
                         }
                         KeyCode::Char('e') => {
-                            if let Err(e) = app.export_summary("summary.txt") {
-                                app.flash_message = Some(format!("Export failed: {}", e));
-                            } else {
-                                app.flash_message = Some("Exported to summary.txt".to_string());
-                            }
-                        },
+                            app.export_summary("summary.txt");
+                        }
                         KeyCode::Char('c') => app.toggle_expand_from_commits_view(),
                         KeyCode::Char('/') => {
                             app.enter_input_mode(AppMode::FuzzyFinder);

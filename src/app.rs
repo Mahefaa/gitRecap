@@ -32,6 +32,7 @@ pub enum LoadingResult {
     ScanComplete(Vec<String>),
     ReloadComplete(Vec<ProjectData>),
     FetchComplete,
+    ExportComplete(Result<String, String>),
 }
 
 #[derive(Clone)]
@@ -166,6 +167,15 @@ impl App {
                         self.loading_rx = None;
                         self.flash_message = Some("Fetch complete!".to_string());
                         self.reload_data(); // reload after fetching
+                        break;
+                    }
+                    LoadingResult::ExportComplete(res) => {
+                        self.is_loading = false;
+                        self.loading_rx = None;
+                        match res {
+                            Ok(msg) => self.flash_message = Some(msg),
+                            Err(e) => self.flash_message = Some(format!("Export failed: {}", e)),
+                        }
                         break;
                     }
                 }
@@ -427,10 +437,7 @@ impl App {
                 if arg.is_empty() {
                     self.flash_message = Some("Filename required for export".to_string());
                 } else {
-                    match self.export_summary(arg) {
-                        Ok(_) => self.flash_message = Some(format!("Exported to {}", arg)),
-                        Err(e) => self.flash_message = Some(format!("Export failed: {}", e)),
-                    }
+                    self.export_summary(arg);
                 }
             }
             "sort" => {
@@ -818,67 +825,124 @@ impl App {
         }
     }
 
-    pub fn export_summary(&self, path: &str) -> Result<(), Box<dyn Error>> {
-        use std::fs::File;
-        use std::io::Write;
+    pub fn export_summary(&mut self, filename: &str) {
+        use std::path::Path;
 
-        let mut file = File::create(path)?;
-        writeln!(file, "# Git Recap Summary\n")?;
-
-        for proj in &self.projects {
-            if !proj.enabled || proj.dates.is_empty() {
-                continue;
+        let file_path = Path::new(filename);
+        if file_path.components().any(|c| matches!(c, std::path::Component::ParentDir | std::path::Component::RootDir)) {
+            self.flash_message = Some("Path traversal and absolute paths are forbidden for security. Use a simple filename.".into());
+            return;
+        }
+        
+        let path = match std::env::current_dir() {
+            Ok(cwd) => cwd.join(file_path),
+            Err(e) => {
+                self.flash_message = Some(format!("Failed to get current dir: {}", e));
+                return;
             }
-            
-            let mut proj_has_commits = false;
-            let mut proj_content = String::new();
-            
-            for date_group in &proj.dates {
-                let mut date_has_commits = false;
-                let mut date_content = format!("### {}\n\n", date_group.date);
+        };
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.is_loading = true;
+        self.loading_rx = Some(rx);
+        
+        let projects = self.projects.clone();
+        
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let result = rt.block_on(async move {
+                use std::fs::File;
+                use std::io::Write;
                 
-                for branch in &date_group.branches {
-                    if branch.commits.is_empty() { continue; }
-                    proj_has_commits = true;
-                    date_has_commits = true;
+                let mut join_set = tokio::task::JoinSet::new();
+                let mut idx = 0;
+                
+                for proj in &projects {
+                    if !proj.enabled || proj.dates.is_empty() { continue; }
+                    for date_group in &proj.dates {
+                        for branch in &date_group.branches {
+                            for c in &branch.commits {
+                                let commit_id = c.id.clone();
+                                let proj_path = proj.path.clone();
+                                let current_idx = idx;
+                                join_set.spawn(async move {
+                                    if let Ok(output) = tokio::process::Command::new("git")
+                                        .arg("show")
+                                        .arg("--name-only")
+                                        .arg("--format=")
+                                        .arg(&commit_id)
+                                        .current_dir(&proj_path)
+                                        .output()
+                                        .await 
+                                    {
+                                        (current_idx, String::from_utf8_lossy(&output.stdout).to_string())
+                                    } else {
+                                        (current_idx, String::new())
+                                    }
+                                });
+                                idx += 1;
+                            }
+                        }
+                    }
+                }
+                
+                let mut results = vec![String::new(); idx];
+                while let Some(Ok((i, output))) = join_set.join_next().await {
+                    results[i] = output;
+                }
+                
+                let mut diff_iter = results.into_iter();
+                
+                let mut file = File::create(&path).map_err(|e| e.to_string())?;
+                writeln!(file, "# Git Recap Summary\n").map_err(|e| e.to_string())?;
+
+                for proj in &projects {
+                    if !proj.enabled || proj.dates.is_empty() { continue; }
+                    let mut proj_has_commits = false;
+                    let mut proj_content = String::new();
                     
-                    date_content.push_str(&format!("#### Branch: `{}`\n\n", branch.name));
-                    
-                    for c in &branch.commits {
-                        date_content.push_str(&format!("- **[{}]** `{}` {}\n", c.author, c.id.chars().take(7).collect::<String>(), c.message));
+                    for date_group in &proj.dates {
+                        let mut date_has_commits = false;
+                        let mut date_content = format!("### {}\n\n", date_group.date);
                         
-                        // Fetch modified files
-                        if let Ok(output) = std::process::Command::new("git")
-                            .arg("show")
-                            .arg("--name-only")
-                            .arg("--format=")
-                            .arg(&c.id)
-                            .current_dir(&proj.path)
-                            .output() {
-                                let files = String::from_utf8_lossy(&output.stdout);
-                                for line in files.lines() {
-                                    let line = line.trim();
-                                    if !line.is_empty() {
-                                        date_content.push_str(&format!("  - `{}`\n", line));
+                        for branch in &date_group.branches {
+                            if branch.commits.is_empty() { continue; }
+                            proj_has_commits = true;
+                            date_has_commits = true;
+                            
+                            date_content.push_str(&format!("#### Branch: `{}`\n\n", branch.name));
+                            
+                            for c in &branch.commits {
+                                date_content.push_str(&format!("- **[{}]** `{}` {}\n", c.author, c.id.chars().take(7).collect::<String>(), c.message));
+                                
+                                if let Some(files) = diff_iter.next() {
+                                    for line in files.lines() {
+                                        let line = line.trim();
+                                        if !line.is_empty() {
+                                            date_content.push_str(&format!("  - `{}`\n", line));
+                                        }
                                     }
                                 }
                             }
+                            date_content.push('\n');
+                        }
+                        
+                        if date_has_commits {
+                            proj_content.push_str(&date_content);
+                        }
                     }
-                    date_content.push('\n');
+                    
+                    if proj_has_commits {
+                        writeln!(file, "## Repository: {}\n", proj.name).map_err(|e| e.to_string())?;
+                        file.write_all(proj_content.as_bytes()).map_err(|e| e.to_string())?;
+                    }
                 }
                 
-                if date_has_commits {
-                    proj_content.push_str(&date_content);
-                }
-            }
+                Ok::<String, String>(format!("Exported to {}", path.display()))
+            });
             
-            if proj_has_commits {
-                writeln!(file, "## Repository: {}\n", proj.name)?;
-                file.write_all(proj_content.as_bytes())?;
-            }
-        }
-
-        Ok(())
+            let _ = tx.send(LoadingResult::ExportComplete(result));
+        });
     }
 
     pub fn push_project(&mut self, force: bool) {
