@@ -437,7 +437,7 @@ fn render_file_explorer(f: &mut Frame, app: &mut App, area: Rect) {
         
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
+        .highlight_style(Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD))
         .highlight_symbol(">> ");
         
     f.render_stateful_widget(list, area, &mut app.file_explorer.list_state);
@@ -500,7 +500,7 @@ fn render_projects_list(f: &mut Frame, app: &mut App, area: Rect) {
 
     let is_active = matches!(app.mode, AppMode::Normal);
     let hl_style = if is_active {
-        Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+        Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD)
     } else {
         Style::default().add_modifier(Modifier::BOLD)
     };
@@ -649,7 +649,7 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
 
     let is_active = matches!(app.mode, AppMode::Details | AppMode::CommitsView);
     let hl_style = if is_active {
-        Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+        Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD)
     } else {
         Style::default().add_modifier(Modifier::BOLD)
     };
@@ -674,7 +674,7 @@ fn render_author_autocomplete(f: &mut Frame, app: &mut App, area: Rect) {
         
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
+        .highlight_style(Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD))
         .highlight_symbol(">> ");
         
         f.render_stateful_widget(list, area, &mut app.author_list_state);

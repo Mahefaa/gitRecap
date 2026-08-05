@@ -79,6 +79,7 @@ pub struct App {
     pub date_start_filter: chrono::DateTime<Local>,
     pub date_end_filter: chrono::DateTime<Local>,
     pub branch_filter: String,
+    pub previous_mode: Option<AppMode>,
     pub projects_area: Option<Rect>,
     pub commits_area: Option<Rect>,
     pub commit_list_map: Vec<(usize, Option<usize>, Option<usize>, Option<usize>)>,
@@ -118,6 +119,7 @@ impl App {
             date_start_filter: today_start,
             date_end_filter: today_end,
             branch_filter: String::new(),
+            previous_mode: None,
             projects_area: None,
             commits_area: None,
             commit_list_map: Vec::new(),
@@ -606,6 +608,24 @@ impl App {
                     }
                 }
             }
+            "c" => {
+                for d in &mut self.timeline {
+                    d.is_expanded = false;
+                    for p in &mut d.projects {
+                        p.is_expanded = false;
+                        for a in &mut p.authors { a.is_expanded = false; }
+                    }
+                }
+            }
+            "e" => {
+                for d in &mut self.timeline {
+                    d.is_expanded = true;
+                    for p in &mut d.projects {
+                        p.is_expanded = true;
+                        for a in &mut p.authors { a.is_expanded = true; }
+                    }
+                }
+            }
             "noprank" => {
                 self.config.no_prank = true;
                 self.config.save();
@@ -836,13 +856,10 @@ impl App {
     }
 
     pub fn enter_input_mode(&mut self, mode: AppMode) {
-        match mode {
-            AppMode::InputAuthor | AppMode::InputDate | AppMode::InputProfile | AppMode::FileExplorer | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::Command | AppMode::Search(_) => {
-                self.input.reset();
-                self.mode = mode.clone();
-            }
-            _ => { self.mode = mode.clone(); }
+        if !matches!(self.mode, AppMode::InputAuthor | AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::Command | AppMode::Search(_)) {
+            self.previous_mode = Some(self.mode.clone());
         }
+        self.mode = mode.clone();
         match self.mode {
             AppMode::InputAuthor => {
                 self.input = self.input.clone().with_value(if self.author_filter == "Any" { String::new() } else { self.author_filter.clone() });
@@ -873,6 +890,9 @@ impl App {
             }
             AppMode::ExplorerJumpPath => {
                 self.input = self.input.clone().with_value(self.file_explorer.current_path.to_string_lossy().to_string());
+            }
+            AppMode::Command => {
+                self.input.reset();
             }
             _ => {}
         }
@@ -923,7 +943,11 @@ impl App {
             AppMode::Command => {
                 let cmd = self.input.value().to_string();
                 self.execute_command(&cmd);
-                self.mode = AppMode::Normal;
+                if let Some(prev) = self.previous_mode.take() {
+                    self.mode = prev;
+                } else {
+                    self.mode = AppMode::Normal;
+                }
             }
             AppMode::InputProfile => {
                 let name = self.input.value().to_string();
@@ -984,15 +1008,18 @@ impl App {
             }
             _ => {}
         }
-        self.mode = AppMode::Normal;
+        if let Some(prev) = self.previous_mode.take() {
+            self.mode = prev;
+        } else {
+            self.mode = AppMode::Normal;
+        }
     }
 
     pub fn cancel_input(&mut self) {
-        match self.mode {
-            AppMode::InputAuthor | AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::Command => {
-                self.mode = AppMode::Normal;
-            }
-            _ => { self.mode = AppMode::Normal; }
+        if let Some(prev) = self.previous_mode.take() {
+            self.mode = prev;
+        } else {
+            self.mode = AppMode::Normal;
         }
     }
 
