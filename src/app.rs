@@ -74,10 +74,17 @@ pub struct TimelineProject {
 }
 
 #[derive(Clone)]
-pub struct TimelineAuthor {
+pub struct TimelineBranch {
     pub name: String,
     pub is_expanded: bool,
     pub commits: Vec<crate::git_utils::GitCommit>,
+}
+
+#[derive(Clone)]
+pub struct TimelineAuthor {
+    pub name: String,
+    pub is_expanded: bool,
+    pub branches: Vec<TimelineBranch>,
 }
 
 pub struct App {
@@ -88,7 +95,7 @@ pub struct App {
     pub previous_mode: Option<AppMode>,
     pub projects_area: Option<Rect>,
     pub commits_area: Option<Rect>,
-    pub commit_list_map: Vec<(usize, Option<usize>, Option<usize>, Option<usize>)>,
+    pub commit_list_map: Vec<(usize, Option<usize>, Option<usize>, Option<usize>, Option<usize>)>,
     
     pub dashboard_list_state: ratatui::widgets::TableState,
     pub dashboard_resolution: TimeResolution,
@@ -321,17 +328,21 @@ impl App {
 
     pub fn build_timeline(&mut self) {
         use std::collections::{BTreeMap, HashMap};
-        let mut agg: BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<crate::git_utils::GitCommit>>>> = BTreeMap::new();
+        let mut agg: BTreeMap<String, BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<crate::git_utils::GitCommit>>>>> = BTreeMap::new();
         
         let mut old_date_expanded = HashMap::new();
         let mut old_proj_expanded = HashMap::new();
         let mut old_author_expanded = HashMap::new();
+        let mut old_branch_expanded = HashMap::new();
         for d in &self.timeline {
             old_date_expanded.insert(d.date.clone(), d.is_expanded);
             for p in &d.projects {
                 old_proj_expanded.insert(format!("{}|{}", d.date, p.name), p.is_expanded);
                 for a in &p.authors {
                     old_author_expanded.insert(format!("{}|{}|{}", d.date, p.name, a.name), a.is_expanded);
+                    for b in &a.branches {
+                        old_branch_expanded.insert(format!("{}|{}|{}|{}", d.date, p.name, a.name, b.name), b.is_expanded);
+                    }
                 }
             }
         }
@@ -353,16 +364,20 @@ impl App {
                                 continue;
                             }
                         }
-                        let commit_list = proj_map_temp.entry(commit.author.clone()).or_insert_with(Vec::new);
+                        let author_map = proj_map_temp.entry(commit.author.clone()).or_insert_with(BTreeMap::new);
+                        let commit_list = author_map.entry(branch.name.clone()).or_insert_with(Vec::new);
                         commit_list.push(commit.clone());
                     }
                 }
                 if !proj_map_temp.is_empty() {
                     let proj_map = agg.entry(date_group.date.clone()).or_insert_with(BTreeMap::new);
                     let author_map = proj_map.entry(proj.name.clone()).or_insert_with(BTreeMap::new);
-                    for (author, commits) in proj_map_temp {
-                        let commit_list = author_map.entry(author).or_insert_with(Vec::new);
-                        commit_list.extend(commits);
+                    for (author, branches) in proj_map_temp {
+                        let branch_map = author_map.entry(author).or_insert_with(BTreeMap::new);
+                        for (branch, commits) in branches {
+                            let commit_list = branch_map.entry(branch).or_insert_with(Vec::new);
+                            commit_list.extend(commits);
+                        }
                     }
                 }
             }
@@ -373,8 +388,18 @@ impl App {
             let mut tl_projects = Vec::new();
             for (proj_name, authors) in projects {
                 let mut tl_authors = Vec::new();
-                for (author_name, mut commits) in authors {
-                    commits.sort_by(|a, b| b.date.cmp(&a.date));
+                for (author_name, branches) in authors {
+                    let mut tl_branches = Vec::new();
+                    for (branch_name, mut commits) in branches {
+                        commits.sort_by(|a, b| b.date.cmp(&a.date));
+                        let key = format!("{}|{}|{}|{}", date, proj_name, author_name, branch_name);
+                        let is_expanded = *old_branch_expanded.get(&key).unwrap_or(&true);
+                        tl_branches.push(TimelineBranch {
+                            name: branch_name,
+                            is_expanded,
+                            commits,
+                        });
+                    }
                     
                     let key = format!("{}|{}|{}", date, proj_name, author_name);
                     let is_expanded = *old_author_expanded.get(&key).unwrap_or(&true);
@@ -382,7 +407,7 @@ impl App {
                     tl_authors.push(TimelineAuthor {
                         name: author_name,
                         is_expanded,
-                        commits,
+                        branches: tl_branches,
                     });
                 }
                 
@@ -523,9 +548,15 @@ impl App {
     pub fn toggle_expand_from_commits_view(&mut self) {
         if let Some(i) = self.commit_list_state.selected() {
             if i < self.commit_list_map.len() {
-                let (date_idx, proj_idx, author_idx, commit_idx) = self.commit_list_map[i];
+                let (date_idx, proj_idx, author_idx, branch_idx, commit_idx) = self.commit_list_map[i];
                 if commit_idx.is_some() {
                     // Do nothing for commits
+                } else if let Some(b_idx) = branch_idx {
+                    if let Some(a_idx) = author_idx {
+                        if let Some(p_idx) = proj_idx {
+                            self.timeline[date_idx].projects[p_idx].authors[a_idx].branches[b_idx].is_expanded = !self.timeline[date_idx].projects[p_idx].authors[a_idx].branches[b_idx].is_expanded;
+                        }
+                    }
                 } else if let Some(a_idx) = author_idx {
                     if let Some(p_idx) = proj_idx {
                         self.timeline[date_idx].projects[p_idx].authors[a_idx].is_expanded = !self.timeline[date_idx].projects[p_idx].authors[a_idx].is_expanded;
@@ -848,21 +879,29 @@ impl App {
     pub fn show_diff_for_selected(&mut self) {
         if let Some(idx) = self.commit_list_state.selected() {
             if idx < self.commit_list_map.len() {
-                let (proj_idx, d_idx, b_idx, c_idx) = self.commit_list_map[idx];
-                if let (Some(d), Some(b), Some(c)) = (d_idx, b_idx, c_idx) {
-                    if proj_idx < self.projects.len() {
-                        if d < self.projects[proj_idx].dates.len() {
-                            if b < self.projects[proj_idx].dates[d].branches.len() {
-                                if c < self.projects[proj_idx].dates[d].branches[b].commits.len() {
-                                    let commit_id = &self.projects[proj_idx].dates[d].branches[b].commits[c].id;
-                                    let proj_path = &self.projects[proj_idx].path;
-                                    
-                                    if let Ok(output) = std::process::Command::new("git")
-                                        .arg("show")
-                                        .arg("--color=always")
-                                        .arg(commit_id)
-                                        .current_dir(proj_path)
-                                        .output() {
+                let (date_idx, proj_idx, author_idx, branch_idx, commit_idx) = self.commit_list_map[idx];
+                if let (Some(p_idx), Some(a_idx), Some(b_idx), Some(c_idx)) = (proj_idx, author_idx, branch_idx, commit_idx) {
+                    if date_idx < self.timeline.len() {
+                        let date_group = &self.timeline[date_idx];
+                        if p_idx < date_group.projects.len() {
+                            let proj = &date_group.projects[p_idx];
+                            if a_idx < proj.authors.len() {
+                                let author = &proj.authors[a_idx];
+                                if b_idx < author.branches.len() {
+                                    let branch = &author.branches[b_idx];
+                                    if c_idx < branch.commits.len() {
+                                        let commit = &branch.commits[c_idx];
+                                        let commit_id = &commit.id;
+                                        
+                                        let proj_name = &proj.name;
+                                        let proj_path = self.projects.iter().find(|p| p.name == *proj_name).map(|p| p.path.clone()).unwrap_or_default();
+                                        
+                                        if let Ok(output) = std::process::Command::new("git")
+                                            .arg("show")
+                                            .arg("--color=always")
+                                            .arg(commit_id)
+                                            .current_dir(&proj_path)
+                                            .output() {
                                             use ansi_to_tui::IntoText;
                                             if let Ok(text) = output.stdout.into_text() {
                                                 self.diff_content = Some(text);
@@ -871,11 +910,12 @@ impl App {
                                             }
                                             self.diff_scroll = 0;
                                         }
+                                    }
                                 }
                             }
                         }
                     }
-                } else if c_idx.is_none() {
+                } else if commit_idx.is_none() {
                     self.diff_content = None;
                 }
             }
@@ -1129,8 +1169,10 @@ impl App {
                 for date_group in &timeline {
                     for proj in &date_group.projects {
                         for author_group in &proj.authors {
-                            for c in &author_group.commits {
-                                project_commits.entry(proj.name.clone()).or_default().push(c.id.clone());
+                            for b in &author_group.branches {
+                                for c in &b.commits {
+                                    project_commits.entry(proj.name.clone()).or_default().push(c.id.clone());
+                                }
                             }
                         }
                     }
@@ -1201,16 +1243,18 @@ impl App {
                         let mut proj_content = format!("### Repository: {}\n\n", proj.name);
                         
                         for author_group in &proj.authors {
-                            if author_group.commits.is_empty() { continue; }
+                            if author_group.branches.iter().all(|b| b.commits.is_empty()) { continue; }
                             proj_has_commits = true;
                             proj_content.push_str(&format!("#### Author: `{}`\n\n", author_group.name));
                             
-                            for c in &author_group.commits {
-                                proj_content.push_str(&format!("- `{}` {}\n", c.id.chars().take(7).collect::<String>(), c.message));
-                                
-                                if let Some(files) = all_diffs.get(&c.id) {
-                                    for line in files.lines() {
-                                        proj_content.push_str(&format!("  - `{}`\n", line));
+                            for branch in &author_group.branches {
+                                for c in &branch.commits {
+                                    proj_content.push_str(&format!("- `{}` {}\n", c.id.chars().take(7).collect::<String>(), c.message));
+                                    
+                                    if let Some(files) = all_diffs.get(&c.id) {
+                                        for line in files.lines() {
+                                            proj_content.push_str(&format!("  - `{}`\n", line));
+                                        }
                                     }
                                 }
                             }

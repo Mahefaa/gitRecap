@@ -183,9 +183,12 @@ fn run_app(
                         KeyCode::Char('E') => {
                             if let Some(idx) = app.commit_list_state.selected() {
                                 if idx < app.commit_list_map.len() {
-                                    let (proj_idx, _, _, _) = app.commit_list_map[idx];
-                                    if proj_idx < app.projects.len() {
-                                        let proj_path = app.projects[proj_idx].path.clone();
+                                    let (date_idx, proj_idx, _, _, _) = app.commit_list_map[idx];
+                                    if let Some(p_idx) = proj_idx {
+                                        if date_idx < app.timeline.len() && p_idx < app.timeline[date_idx].projects.len() {
+                                            let proj_name = &app.timeline[date_idx].projects[p_idx].name;
+                                            if let Some(proj) = app.projects.iter().find(|p| p.name == *proj_name) {
+                                                let proj_path = proj.path.clone();
                                         
                                         // Suspend UI
                                         let _ = crossterm::terminal::disable_raw_mode();
@@ -205,6 +208,8 @@ fn run_app(
                                         
                                         app.reload_data();
                                         app.flash_message = Some("Amended commit!".to_string());
+                                            }
+                                        }
                                     }
                                 }
                             }
