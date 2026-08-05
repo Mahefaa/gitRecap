@@ -369,7 +369,10 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                         let color = proj_colors.get(*p_name).copied().unwrap_or(Color::Green);
                         let percent = if total_hours > 0.0 { (hours / total_hours) * 100.0 } else { 0.0 };
                         let percent_rounded = percent.round() as u64;
-                        bars.push(Bar::default().value(percent_rounded).text_value(format!("{}%", percent_rounded)).style(Style::default().fg(color)));
+                        let bar_value = (hours * 10.0).round() as u64;
+                        // Minimum height of 1 to render the text if > 0
+                        let bar_value = if hours > 0.0 && bar_value == 0 { 1 } else { bar_value };
+                        bars.push(Bar::default().value(bar_value).text_value(format!("{}%", percent_rounded)).style(Style::default().fg(color)));
                     }
                 }
                 if !bars.is_empty() {
@@ -472,9 +475,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             // Wait, `data` takes `impl IntoIterator<Item = BarGroup>`.
             let mut barchart = ratatui::widgets::BarChart::default()
                 .block(Block::default().title(barchart_block_title).borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)))
-                .bar_width(6) // narrower bars since there can be many projects side-by-side
+                .bar_width(3) // narrower bars for a lighter look
                 .bar_gap(1)
-                .group_gap(3) // Gap between different dates
+                .group_gap(5) // larger gap between different dates to prevent clutter
                 .value_style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD));
             
             for group in bar_groups {
