@@ -893,31 +893,38 @@ impl App {
                 
                 for proj in &projects {
                     if !proj.enabled || proj.dates.is_empty() { continue; }
+                    
+                    let mut commit_ids = Vec::new();
                     for date_group in &proj.dates {
                         for branch in &date_group.branches {
                             for c in &branch.commits {
-                                let commit_id = c.id.clone();
-                                let proj_path = proj.path.clone();
-                                let current_idx = idx;
-                                join_set.spawn(async move {
-                                    if let Ok(output) = tokio::process::Command::new("git")
-                                        .arg("show")
-                                        .arg("--name-only")
-                                        .arg("--format=")
-                                        .arg(&commit_id)
-                                        .current_dir(&proj_path)
-                                        .output()
-                                        .await 
-                                    {
-                                        (current_idx, String::from_utf8_lossy(&output.stdout).to_string())
-                                    } else {
-                                        (current_idx, String::new())
-                                    }
-                                });
-                                idx += 1;
+                                commit_ids.push(c.id.clone());
                             }
                         }
                     }
+                    
+                    if commit_ids.is_empty() { continue; }
+                    
+                    let proj_path = proj.path.clone();
+                    let current_idx = idx;
+                    join_set.spawn(async move {
+                        let mut output = String::new();
+                        for chunk in commit_ids.chunks(500) {
+                            if let Ok(cmd_out) = tokio::process::Command::new("git")
+                                .arg("show")
+                                .arg("--name-only")
+                                .arg("--format=COMMIT:%H")
+                                .args(chunk)
+                                .current_dir(&proj_path)
+                                .output()
+                                .await 
+                            {
+                                output.push_str(&String::from_utf8_lossy(&cmd_out.stdout));
+                            }
+                        }
+                        (current_idx, output)
+                    });
+                    idx += 1;
                 }
                 
                 let mut results = vec![String::new(); idx];
@@ -925,7 +932,34 @@ impl App {
                     results[i] = output;
                 }
                 
-                let mut diff_iter = results.into_iter();
+                let mut project_diffs = std::collections::HashMap::new();
+                let mut proj_idx = 0;
+                for proj in &projects {
+                    if !proj.enabled || proj.dates.is_empty() { continue; }
+                    
+                    let proj_output = &results[proj_idx];
+                    let mut commit_map = std::collections::HashMap::new();
+                    let mut current_commit = String::new();
+                    let mut current_files = Vec::new();
+                    
+                    for line in proj_output.lines() {
+                        if line.starts_with("COMMIT:") {
+                            if !current_commit.is_empty() {
+                                commit_map.insert(current_commit.clone(), current_files.join("\n"));
+                            }
+                            current_commit = line.trim_start_matches("COMMIT:").trim().to_string();
+                            current_files.clear();
+                        } else if !line.trim().is_empty() {
+                            current_files.push(line.trim().to_string());
+                        }
+                    }
+                    if !current_commit.is_empty() {
+                        commit_map.insert(current_commit, current_files.join("\n"));
+                    }
+                    
+                    project_diffs.insert(proj.name.clone(), commit_map);
+                    proj_idx += 1;
+                }
                 
                 let mut file = File::create(&path).map_err(|e| e.to_string())?;
                 writeln!(file, "# Git Recap Summary\n").map_err(|e| e.to_string())?;
@@ -934,6 +968,7 @@ impl App {
                     if !proj.enabled || proj.dates.is_empty() { continue; }
                     let mut proj_has_commits = false;
                     let mut proj_content = String::new();
+                    let commit_map = project_diffs.get(&proj.name).unwrap();
                     
                     for date_group in &proj.dates {
                         let mut date_has_commits = false;
@@ -949,12 +984,9 @@ impl App {
                             for c in &branch.commits {
                                 date_content.push_str(&format!("- **[{}]** `{}` {}\n", c.author, c.id.chars().take(7).collect::<String>(), c.message));
                                 
-                                if let Some(files) = diff_iter.next() {
+                                if let Some(files) = commit_map.get(&c.id) {
                                     for line in files.lines() {
-                                        let line = line.trim();
-                                        if !line.is_empty() {
-                                            date_content.push_str(&format!("  - `{}`\n", line));
-                                        }
+                                        date_content.push_str(&format!("  - `{}`\n", line));
                                     }
                                 }
                             }
