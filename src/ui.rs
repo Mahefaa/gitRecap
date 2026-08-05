@@ -260,23 +260,51 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         }
         AppMode::Dashboard => {
             let mut data: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+            let mut time_per_project: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+            let mut commits_per_project: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
             let mut total_commits = 0;
+            let mut total_hours = 0.0;
+            
+            for d in &app.timeline {
+                let date_str = d.date.clone();
+                for p in &d.projects {
+                    let mut proj_commits = 0;
+                    let mut proj_hours = 0.0;
+                    for a in &p.authors {
+                        proj_commits += a.commits.len();
+                        
+                        let mut dates: Vec<_> = a.commits.iter().map(|c| c.date).collect();
+                        dates.sort();
+                        let mut prev_date: Option<chrono::DateTime<chrono::Local>> = None;
+                        for date in dates {
+                            let mut hours = 0.5; // Base session time
+                            if let Some(prev) = prev_date {
+                                let diff = (date - prev).num_minutes();
+                                if diff <= 120 && diff >= 0 {
+                                    hours = diff as f64 / 60.0;
+                                }
+                            }
+                            proj_hours += hours;
+                            prev_date = Some(date);
+                        }
+                    }
+                    
+                    *data.entry(date_str.clone()).or_insert(0) += proj_commits as u64;
+                    total_commits += proj_commits;
+                    
+                    if proj_commits > 0 {
+                        *commits_per_project.entry(p.name.clone()).or_insert(0) += proj_commits;
+                        *time_per_project.entry(p.name.clone()).or_insert(0.0) += proj_hours;
+                        total_hours += proj_hours;
+                    }
+                }
+            }
+            
             let mut most_active_repo = String::from("None");
             let mut max_repo_commits = 0;
-            
-            for proj in &app.projects {
-                if !proj.enabled { continue; }
-                let mut repo_commits = 0;
-                for d in &proj.dates {
-                    let count: usize = d.branches.iter().map(|b| b.commits.len()).sum();
-                    *data.entry(d.date.clone()).or_insert(0) += count as u64;
-                    repo_commits += count;
-                }
-                total_commits += repo_commits;
-                if repo_commits > max_repo_commits {
-                    max_repo_commits = repo_commits;
-                    most_active_repo = proj.name.clone();
-                }
+            if let Some((best_repo, &max_commits)) = commits_per_project.iter().max_by_key(|(_, v)| *v) {
+                most_active_repo = best_repo.clone();
+                max_repo_commits = max_commits;
             }
             
             let mut sorted_data: Vec<(String, u64)> = data.into_iter().collect();
@@ -285,23 +313,59 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             
             let dashboard_layout = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Length(5), Constraint::Min(0)].as_ref())
+                .constraints([Constraint::Length(5), Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
                 .split(chunks[1]);
                 
             let stats_text = vec![
-                Line::from(Span::styled(format!("Total Commits in View: {}", total_commits), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-                Line::from(Span::styled(format!("Most Active Repository: {} ({} commits)", most_active_repo, max_repo_commits), Style::default().fg(Color::Magenta))),
+                Line::from(vec![
+                    Span::styled(format!("Total Commits in View: {} | ", total_commits), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("Total Time Spent: {:.1}h ({:.2}d) | ", total_hours, total_hours / app.config.working_day_hours), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("Most Active Repository: {} ({} commits)", most_active_repo, max_repo_commits), Style::default().fg(Color::Magenta)),
+                ]),
                 Line::from(Span::styled("This dashboard visualizes your Git activity across all enabled projects over time.", Style::default().fg(Color::DarkGray))),
+                Line::from(Span::styled(format!("Working day configured as: {:.1} hours", app.config.working_day_hours), Style::default().fg(Color::DarkGray))),
             ];
             
             let stats_block = Paragraph::new(stats_text)
-                .block(Block::default().borders(Borders::ALL).title("Insights").border_style(Style::default().fg(Color::Green)))
+                .block(Block::default().borders(Borders::ALL).title("Insights (Press 'Esc' or 'v' to exit)").border_style(Style::default().fg(Color::Green)))
                 .alignment(ratatui::layout::Alignment::Center);
                 
             f.render_widget(stats_block, dashboard_layout[0]);
             
+            // Pie Chart / Time Breakdown Table
+            let mut project_stats: Vec<(&String, &f64)> = time_per_project.iter().collect();
+            project_stats.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
+            
+            use ratatui::widgets::{Table, Row, Cell};
+            let mut table_rows = Vec::new();
+            for (p_name, &p_hours) in project_stats {
+                let p_commits = commits_per_project.get(p_name).unwrap_or(&0);
+                let p_days = p_hours / app.config.working_day_hours;
+                let percent = if total_hours > 0.0 { (p_hours / total_hours) * 100.0 } else { 0.0 };
+                
+                table_rows.push(Row::new(vec![
+                    Cell::from(p_name.clone()).style(Style::default().fg(Color::Yellow)),
+                    Cell::from(p_commits.to_string()),
+                    Cell::from(format!("{:.1}h", p_hours)).style(Style::default().fg(Color::Cyan)),
+                    Cell::from(format!("{:.2}d", p_days)).style(Style::default().fg(Color::Magenta)),
+                    Cell::from(format!("{:.1}%", percent)).style(Style::default().fg(Color::Green)),
+                ]));
+            }
+            
+            let table = Table::new(table_rows, [
+                Constraint::Percentage(40),
+                Constraint::Percentage(15),
+                Constraint::Percentage(15),
+                Constraint::Percentage(15),
+                Constraint::Percentage(15),
+            ])
+            .header(Row::new(vec!["Project (Time Breakdown)", "Commits", "Hours Spent", "Days Spent", "% of Total"]).style(Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))
+            .block(Block::default().borders(Borders::ALL).title("Time Spent Breakdown").border_style(Style::default().fg(Color::Blue)));
+            
+            f.render_widget(table, dashboard_layout[1]);
+            
             let barchart = ratatui::widgets::BarChart::default()
-                .block(Block::default().title("Activity Dashboard (Press 'Esc' or 'v' to exit)").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)))
+                .block(Block::default().title("Activity Timeline (Commits per Day)").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)))
                 .data(&display_data)
                 .bar_width(12)
                 .bar_gap(2)
@@ -309,7 +373,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 .label_style(Style::default().fg(Color::Cyan))
                 .bar_style(Style::default().fg(Color::Green));
                 
-            f.render_widget(barchart, dashboard_layout[1]);
+            f.render_widget(barchart, dashboard_layout[2]);
         }
     }
 

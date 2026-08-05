@@ -24,6 +24,7 @@ pub struct AppProfile {
 
 fn default_author() -> String { "Any".to_string() }
 fn default_date_filter() -> String { "today".to_string() }
+fn default_working_hours() -> f64 { 24.0 }
 
 impl Default for AppProfile {
     fn default() -> Self {
@@ -48,6 +49,8 @@ pub struct AppConfig {
     pub default_export_path: Option<String>,
     #[serde(default)]
     pub no_prank: bool,
+    #[serde(default = "default_working_hours")]
+    pub working_day_hours: f64,
 }
 
 impl AppConfig {
@@ -70,6 +73,7 @@ impl AppConfig {
                     profiles: vec![AppProfile::default()],
                     default_export_path: None,
                     no_prank: false,
+                    working_day_hours: 24.0,
                 },
             }
         } else {
@@ -78,6 +82,7 @@ impl AppConfig {
                 profiles: vec![AppProfile::default()],
                 default_export_path: None,
                 no_prank: false,
+                working_day_hours: 24.0,
             }
         }
     }
