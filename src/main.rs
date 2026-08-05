@@ -227,8 +227,10 @@ fn run_app(
                     match key.code {
                         KeyCode::Enter => app.submit_input(),
                         KeyCode::Esc => app.cancel_input(),
-                        KeyCode::Down | KeyCode::Char('j') => app.next_item(),
-                        KeyCode::Up | KeyCode::Char('k') => app.previous_item(),
+                        KeyCode::Down => app.next_item(),
+                        KeyCode::Up => app.previous_item(),
+                        KeyCode::Char('j') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => app.next_item(),
+                        KeyCode::Char('k') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => app.previous_item(),
                         _ => {
                             app.input.handle_event(&Event::Key(key));
                             app.author_list_state.select(Some(0));
@@ -276,8 +278,10 @@ fn run_app(
                             }
                             app.cancel_input();
                         }
-                        KeyCode::Down | KeyCode::Char('j') => app.next_item(),
-                        KeyCode::Up | KeyCode::Char('k') => app.previous_item(),
+                        KeyCode::Down => app.next_item(),
+                        KeyCode::Up => app.previous_item(),
+                        KeyCode::Char('j') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => app.next_item(),
+                        KeyCode::Char('k') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => app.previous_item(),
                         _ => {
                             let old = app.input.value().to_string();
                             app.input.handle_event(&Event::Key(key));
