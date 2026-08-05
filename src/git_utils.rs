@@ -85,13 +85,15 @@ pub fn get_commits(
         }
     }
 
+    let filter_author = author_name.to_lowercase();
+    let filter_branches: Vec<String> = branch_filter.split(',').map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect();
+
     if let Ok(local_branches) = repo.branches(Some(git2::BranchType::Local)) {
         for branch_res in local_branches.filter_map(|b| b.ok()) {
             let (branch, _) = branch_res;
             let raw_branch_name = branch.name().unwrap_or(Some("unknown")).unwrap_or("unknown").to_string();
             let branch_name = raw_branch_name.chars().map(|c| if c.is_control() { ' ' } else { c }).collect::<String>();
             
-            let filter_branches: Vec<String> = branch_filter.split(',').map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect();
             if !filter_branches.is_empty() {
                 let matches = filter_branches.iter().any(|fb| branch_name.to_lowercase().contains(fb));
                 if !matches {
@@ -118,7 +120,6 @@ pub fn get_commits(
                             if author_time >= start_ts && author_time <= end_ts {
                                 let author = commit.author();
                                 let author_str = author.name().unwrap_or("").to_lowercase();
-                                let filter_author = author_name.to_lowercase();
                                 
                                 if filter_author.is_empty() || filter_author == "any" || author_str.contains(&filter_author) {
                                     let is_pushed = pushed_commits.contains(&oid);

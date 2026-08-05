@@ -14,6 +14,9 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{error::Error, io::{self, BufWriter}};
 use tui_input::backend::crossterm::EventHandler;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn main() -> Result<(), Box<dyn Error>> {
     enable_raw_mode()?;
     let stdout = io::stdout();
