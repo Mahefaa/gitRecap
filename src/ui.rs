@@ -526,92 +526,87 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
     let mut items = Vec::new();
     app.commit_list_map.clear();
 
-    let mut projects_to_show = Vec::new();
-    
-    if let AppMode::Details = app.mode {
+    let target_proj = if let AppMode::Details = app.mode {
         if let Some(idx) = app.selected_project_idx {
             if idx < app.projects.len() {
-                projects_to_show.push((idx, &app.projects[idx]));
-            }
-        }
-    } else {
-        for (idx, proj) in app.projects.iter().enumerate() {
-            if proj.enabled {
-                projects_to_show.push((idx, proj));
-            }
-        }
-    }
+                Some(app.projects[idx].name.clone())
+            } else { None }
+        } else { None }
+    } else { None };
 
     let mut commit_count = 0;
     const LIMIT: usize = 1000;
     let mut total_commits_in_view = 0;
     
-
-
-    for (proj_idx, proj) in projects_to_show {
-        if proj.dates.is_empty() {
-            continue;
+    for (date_idx, date_group) in app.timeline.iter().enumerate() {
+        let mut visible_projects = Vec::new();
+        for (proj_idx, proj) in date_group.projects.iter().enumerate() {
+            if let Some(ref target) = target_proj {
+                if proj.name != *target { continue; }
+            }
+            visible_projects.push((proj_idx, proj));
         }
         
-        let proj_commits: usize = proj.dates.iter().flat_map(|d| d.branches.iter().map(|b| b.commits.len())).sum();
-        total_commits_in_view += proj_commits;
+        if visible_projects.is_empty() { continue; }
         
-        if commit_count >= LIMIT {
-            continue;
-        }
+        let date_commits: usize = visible_projects.iter()
+            .flat_map(|(_, p)| p.authors.iter().map(|a| a.commits.len()))
+            .sum();
+            
+        total_commits_in_view += date_commits;
         
-        if !proj.is_expanded {
+        if commit_count >= LIMIT { continue; }
+        
+        if !date_group.is_expanded {
             items.push(ListItem::new(Line::from(vec![
-                Span::styled(format!("{} (collapsed)", proj.name), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{} (collapsed)", date_group.date), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
             ])));
-            app.commit_list_map.push((proj_idx, None, None, None));
+            app.commit_list_map.push((date_idx, None, None, None));
             continue;
         }
 
         items.push(ListItem::new(Line::from(vec![
-            Span::styled(format!("{} ", proj.name), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{} ", date_group.date), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
         ])));
-        app.commit_list_map.push((proj_idx, None, None, None));
+        app.commit_list_map.push((date_idx, None, None, None));
         
-        for (date_idx, date_group) in proj.dates.iter().enumerate() {
+        for (proj_idx, proj) in visible_projects {
             if commit_count >= LIMIT { break; }
-            if !date_group.is_expanded {
+            if !proj.is_expanded {
                 items.push(ListItem::new(Line::from(vec![
                     Span::raw("  "),
-                    Span::styled(format!("{} (collapsed)", date_group.date), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("{} (collapsed)", proj.name), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
                 ])));
-                app.commit_list_map.push((proj_idx, Some(date_idx), None, None));
+                app.commit_list_map.push((date_idx, Some(proj_idx), None, None));
                 continue;
             }
             
             items.push(ListItem::new(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(format!("{} ", date_group.date), Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{} ", proj.name), Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
             ])));
-            app.commit_list_map.push((proj_idx, Some(date_idx), None, None));
+            app.commit_list_map.push((date_idx, Some(proj_idx), None, None));
             
-            for (branch_idx, branch_group) in date_group.branches.iter().enumerate() {
+            for (author_idx, author_group) in proj.authors.iter().enumerate() {
                 if commit_count >= LIMIT { break; }
-                if !branch_group.is_expanded {
+                if !author_group.is_expanded {
                     items.push(ListItem::new(Line::from(vec![
                         Span::raw("    "),
-                        Span::styled(format!("{} (collapsed)", branch_group.name), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("{} (collapsed)", author_group.name), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
                     ])));
-                    app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx), None));
+                    app.commit_list_map.push((date_idx, Some(proj_idx), Some(author_idx), None));
                     continue;
                 }
                 
-                if !branch_group.commits.is_empty() {
+                if !author_group.commits.is_empty() {
                     items.push(ListItem::new(Line::from(vec![
                         Span::raw("    "),
-                        Span::styled(format!("{} ", branch_group.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("{} ", author_group.name), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
                     ])));
-                    app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx), None));
+                    app.commit_list_map.push((date_idx, Some(proj_idx), Some(author_idx), None));
                 }
                 
-                for (commit_idx, commit) in branch_group.commits.iter().enumerate() {
-
-
+                for (commit_idx, commit) in author_group.commits.iter().enumerate() {
                     if commit_count >= LIMIT { break; }
                     
                     let push_status = if commit.is_pushed {
@@ -627,7 +622,6 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                     
                     let id_style = if app.config.no_prank { Style::default() } else { Style::default().fg(pride) };
                     let date_style = if app.config.no_prank { Style::default().fg(Color::Blue) } else { Style::default().fg(pride) };
-                    let author_style = if app.config.no_prank { Style::default().fg(Color::LightCyan) } else { Style::default().fg(pride) };
                     let msg_style = if app.config.no_prank { Style::default() } else { Style::default().fg(pride) };
 
                     let line = Line::from(vec![
@@ -635,11 +629,10 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                         push_status,
                         Span::styled(format!("{} ", commit.id.chars().take(7).collect::<String>()), id_style),
                         Span::styled(format!("{} ", commit.date.format("%H:%M")), date_style),
-                        Span::styled(format!("[{}] ", commit.author), author_style),
                         Span::styled(format!("{}", commit.message), msg_style),
                     ]);
                     items.push(ListItem::new(vec![line]));
-                    app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx), Some(commit_idx)));
+                    app.commit_list_map.push((date_idx, Some(proj_idx), Some(author_idx), Some(commit_idx)));
                     commit_count += 1;
                 }
             }

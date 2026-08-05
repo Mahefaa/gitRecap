@@ -47,6 +47,27 @@ pub struct ProjectData {
 }
 
 #[derive(Clone)]
+pub struct TimelineDate {
+    pub date: String,
+    pub is_expanded: bool,
+    pub projects: Vec<TimelineProject>,
+}
+
+#[derive(Clone)]
+pub struct TimelineProject {
+    pub name: String,
+    pub is_expanded: bool,
+    pub authors: Vec<TimelineAuthor>,
+}
+
+#[derive(Clone)]
+pub struct TimelineAuthor {
+    pub name: String,
+    pub is_expanded: bool,
+    pub commits: Vec<crate::git_utils::GitCommit>,
+}
+
+#[derive(Clone)]
 pub struct FuzzyResult {
     pub project_name: String,
     pub branch_name: String,
@@ -86,6 +107,7 @@ pub struct App {
     pub hide_zero_commits: bool,
     pub diff_content: Option<ratatui::text::Text<'static>>,
     pub diff_scroll: u16,
+    pub timeline: Vec<TimelineDate>,
 }
 
 impl App {
@@ -121,6 +143,7 @@ impl App {
             hide_zero_commits: false,
             diff_content: None,
             diff_scroll: 0,
+            timeline: Vec::new(),
         };
         app.current_profile = app.config.get_active_profile();
         app.sources = app.current_profile.sources.clone();
@@ -155,12 +178,14 @@ impl App {
                         self.projects.sort_by(|a, b| a.name.cmp(&b.name));
                         self.is_loading = false;
                         self.loading_rx = None;
+                        self.build_timeline();
                         break;
                     }
                     LoadingResult::ReloadComplete(updated_projects) => {
                         self.projects = updated_projects;
                         self.is_loading = false;
                         self.loading_rx = None;
+                        self.build_timeline();
                         break;
                     }
                     LoadingResult::FetchComplete => {
@@ -204,6 +229,78 @@ impl App {
             self.config.update_active_profile(self.current_profile.clone());
             self.scan_sources();
         }
+    }
+
+    pub fn build_timeline(&mut self) {
+        use std::collections::{BTreeMap, HashMap};
+        let mut agg: BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<crate::git_utils::GitCommit>>>> = BTreeMap::new();
+        
+        let mut old_date_expanded = HashMap::new();
+        let mut old_proj_expanded = HashMap::new();
+        let mut old_author_expanded = HashMap::new();
+        for d in &self.timeline {
+            old_date_expanded.insert(d.date.clone(), d.is_expanded);
+            for p in &d.projects {
+                old_proj_expanded.insert(format!("{}|{}", d.date, p.name), p.is_expanded);
+                for a in &p.authors {
+                    old_author_expanded.insert(format!("{}|{}|{}", d.date, p.name, a.name), a.is_expanded);
+                }
+            }
+        }
+
+        let projects_to_show: Vec<_> = self.projects.iter().filter(|p| p.enabled).collect();
+
+        for proj in projects_to_show {
+            for date_group in &proj.dates {
+                let proj_map = agg.entry(date_group.date.clone()).or_insert_with(BTreeMap::new);
+                let author_map = proj_map.entry(proj.name.clone()).or_insert_with(BTreeMap::new);
+                
+                for branch in &date_group.branches {
+                    for commit in &branch.commits {
+                        let commit_list = author_map.entry(commit.author.clone()).or_insert_with(Vec::new);
+                        commit_list.push(commit.clone());
+                    }
+                }
+            }
+        }
+        
+        let mut timeline = Vec::new();
+        for (date, projects) in agg.into_iter().rev() {
+            let mut tl_projects = Vec::new();
+            for (proj_name, authors) in projects {
+                let mut tl_authors = Vec::new();
+                for (author_name, mut commits) in authors {
+                    commits.sort_by(|a, b| b.date.cmp(&a.date));
+                    
+                    let key = format!("{}|{}|{}", date, proj_name, author_name);
+                    let is_expanded = *old_author_expanded.get(&key).unwrap_or(&true);
+                    
+                    tl_authors.push(TimelineAuthor {
+                        name: author_name,
+                        is_expanded,
+                        commits,
+                    });
+                }
+                
+                let key = format!("{}|{}", date, proj_name);
+                let is_expanded = *old_proj_expanded.get(&key).unwrap_or(&true);
+                
+                tl_projects.push(TimelineProject {
+                    name: proj_name,
+                    is_expanded,
+                    authors: tl_authors,
+                });
+            }
+            
+            let is_expanded = *old_date_expanded.get(&date).unwrap_or(&true);
+            timeline.push(TimelineDate {
+                date,
+                is_expanded,
+                projects: tl_projects,
+            });
+        }
+        
+        self.timeline = timeline;
     }
 
     pub fn scan_sources(&mut self) {
@@ -320,23 +417,19 @@ impl App {
     }
 
     pub fn toggle_expand_from_commits_view(&mut self) {
-        if let Some(selected_line) = self.commit_list_state.selected() {
-            if selected_line < self.commit_list_map.len() {
-                let (proj_idx, date_idx, branch_idx, _) = self.commit_list_map[selected_line];
-                if proj_idx < self.projects.len() {
-                    if let Some(d_idx) = date_idx {
-                        if let Some(b_idx) = branch_idx {
-                            if d_idx < self.projects[proj_idx].dates.len() && b_idx < self.projects[proj_idx].dates[d_idx].branches.len() {
-                                self.projects[proj_idx].dates[d_idx].branches[b_idx].is_expanded = !self.projects[proj_idx].dates[d_idx].branches[b_idx].is_expanded;
-                            }
-                        } else {
-                            if d_idx < self.projects[proj_idx].dates.len() {
-                                self.projects[proj_idx].dates[d_idx].is_expanded = !self.projects[proj_idx].dates[d_idx].is_expanded;
-                            }
-                        }
-                    } else {
-                        self.projects[proj_idx].is_expanded = !self.projects[proj_idx].is_expanded;
+        if let Some(i) = self.commit_list_state.selected() {
+            if i < self.commit_list_map.len() {
+                let (date_idx, proj_idx, author_idx, commit_idx) = self.commit_list_map[i];
+                if commit_idx.is_some() {
+                    // Do nothing for commits
+                } else if let Some(a_idx) = author_idx {
+                    if let Some(p_idx) = proj_idx {
+                        self.timeline[date_idx].projects[p_idx].authors[a_idx].is_expanded = !self.timeline[date_idx].projects[p_idx].authors[a_idx].is_expanded;
                     }
+                } else if let Some(p_idx) = proj_idx {
+                    self.timeline[date_idx].projects[p_idx].is_expanded = !self.timeline[date_idx].projects[p_idx].is_expanded;
+                } else {
+                    self.timeline[date_idx].is_expanded = !self.timeline[date_idx].is_expanded;
                 }
             }
         }
@@ -407,29 +500,21 @@ impl App {
         let arg = parts.get(1).unwrap_or(&"").trim();
 
         match command {
-            "cp" => { for p in &mut self.projects { p.is_expanded = false; } }
-            "ep" => { for p in &mut self.projects { p.is_expanded = true; } }
-            "cd" => {
-                for p in &mut self.projects {
-                    for d in &mut p.dates { d.is_expanded = false; }
-                }
-            }
-            "ed" => {
-                for p in &mut self.projects {
-                    for d in &mut p.dates { d.is_expanded = true; }
-                }
-            }
-            "cb" => {
-                for p in &mut self.projects {
-                    for d in &mut p.dates {
-                        for b in &mut d.branches { b.is_expanded = false; }
+            "cp" => { for d in &mut self.timeline { for p in &mut d.projects { p.is_expanded = false; } } }
+            "ep" => { for d in &mut self.timeline { for p in &mut d.projects { p.is_expanded = true; } } }
+            "cd" => { for d in &mut self.timeline { d.is_expanded = false; } }
+            "ed" => { for d in &mut self.timeline { d.is_expanded = true; } }
+            "cb" | "ca" => {
+                for d in &mut self.timeline {
+                    for p in &mut d.projects {
+                        for a in &mut p.authors { a.is_expanded = false; }
                     }
                 }
             }
-            "eb" => {
-                for p in &mut self.projects {
-                    for d in &mut p.dates {
-                        for b in &mut d.branches { b.is_expanded = true; }
+            "eb" | "ea" => {
+                for d in &mut self.timeline {
+                    for p in &mut d.projects {
+                        for a in &mut p.authors { a.is_expanded = true; }
                     }
                 }
             }
