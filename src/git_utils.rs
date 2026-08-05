@@ -15,14 +15,12 @@ pub struct GitCommit {
 #[derive(Clone)]
 pub struct DateGroup {
     pub date: String,
-    pub is_expanded: bool,
     pub branches: Vec<BranchGroup>,
 }
 
 #[derive(Clone)]
 pub struct BranchGroup {
     pub name: String,
-    pub is_expanded: bool,
     pub commits: Vec<GitCommit>,
 }
 
@@ -162,21 +160,19 @@ pub fn get_commits(
     }
     
     let mut date_groups = Vec::new();
-    for (date, branch_map) in date_map {
+    for (d_name, branch_map) in date_map {
         let mut branches = Vec::new();
-        for (name, commits) in branch_map {
-            let mut sorted_commits = commits;
+        for (b_name, b_commits) in branch_map {
+            let mut sorted_commits = b_commits;
             sorted_commits.sort_by(|a, b| b.date.cmp(&a.date));
             branches.push(BranchGroup {
-                name,
-                is_expanded: true,
+                name: b_name,
                 commits: sorted_commits,
             });
         }
         branches.sort_by(|a, b| a.name.cmp(&b.name));
         date_groups.push(DateGroup {
-            date,
-            is_expanded: true,
+            date: d_name,
             branches,
         });
     }

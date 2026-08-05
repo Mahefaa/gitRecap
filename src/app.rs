@@ -2,7 +2,6 @@ use crate::git_utils::DateGroup;
 use chrono::{Local, NaiveDate, Datelike};
 use ratatui::widgets::ListState;
 use ratatui::layout::Rect;
-use std::error::Error;
 use std::path::PathBuf;
 use tui_input::Input;
 use crate::config::{AppConfig, AppProfile};

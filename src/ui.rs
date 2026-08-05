@@ -440,7 +440,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             ])
             .header(Row::new(vec!["Project (Time Breakdown)", "Commits", "Hours Spent", "Days Spent", "% of Total"]).style(Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))
             .block(Block::default().borders(Borders::ALL).title("Time Spent Breakdown (Use j/k to filter chart)").border_style(Style::default().fg(Color::Blue)))
-            .highlight_style(Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD))
+            .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD))
             .highlight_symbol(">> ");
             
             f.render_stateful_widget(table, dashboard_layout[1], &mut app.dashboard_list_state);

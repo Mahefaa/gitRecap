@@ -12,7 +12,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{error::Error, io::{self, BufWriter}};
-use tui_input::{backend::crossterm::EventHandler, Input};
+use tui_input::backend::crossterm::EventHandler;
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
