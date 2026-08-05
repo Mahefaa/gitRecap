@@ -244,6 +244,20 @@ fn run_app(
                 },
                 AppMode::Dashboard => match key.code {
                     KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('v') => app.mode = AppMode::Normal,
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        let i = match app.dashboard_list_state.selected() {
+                            Some(i) => i + 1,
+                            None => 0,
+                        };
+                        app.dashboard_list_state.select(Some(i));
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        let i = match app.dashboard_list_state.selected() {
+                            Some(i) => i.saturating_sub(1),
+                            None => 0,
+                        };
+                        app.dashboard_list_state.select(Some(i));
+                    }
                     _ => {}
                 },
                 AppMode::Help => {

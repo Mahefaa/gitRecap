@@ -259,14 +259,12 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             f.render_widget(p, area);
         }
         AppMode::Dashboard => {
-            let mut data: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
             let mut time_per_project: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
             let mut commits_per_project: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
             let mut total_commits = 0;
             let mut total_hours = 0.0;
             
             for d in &app.timeline {
-                let date_str = d.date.clone();
                 for p in &d.projects {
                     let mut proj_commits = 0;
                     let mut proj_hours = 0.0;
@@ -289,7 +287,6 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                         }
                     }
                     
-                    *data.entry(date_str.clone()).or_insert(0) += proj_commits as u64;
                     total_commits += proj_commits;
                     
                     if proj_commits > 0 {
@@ -297,6 +294,37 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                         *time_per_project.entry(p.name.clone()).or_insert(0.0) += proj_hours;
                         total_hours += proj_hours;
                     }
+                }
+            }
+            
+            let mut project_stats: Vec<(&String, &f64)> = time_per_project.iter().collect();
+            project_stats.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
+            
+            let row_count = project_stats.len() + 1; // +1 for "All Projects"
+            let sel = match app.dashboard_list_state.selected() {
+                Some(i) => if i >= row_count { row_count.saturating_sub(1) } else { i },
+                None => { app.dashboard_list_state.select(Some(0)); 0 }
+            };
+            if app.dashboard_list_state.selected() != Some(sel) {
+                app.dashboard_list_state.select(Some(sel));
+            }
+            
+            let selected_project_name = if sel == 0 {
+                None
+            } else {
+                Some(project_stats[sel - 1].0.clone())
+            };
+            
+            let mut data: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+            for d in &app.timeline {
+                let date_str = d.date.clone();
+                for p in &d.projects {
+                    if let Some(ref sp) = selected_project_name {
+                        if &p.name != sp { continue; }
+                    }
+                    
+                    let proj_commits: usize = p.authors.iter().map(|a| a.commits.len()).sum();
+                    *data.entry(date_str.clone()).or_insert(0) += proj_commits as u64;
                 }
             }
             
@@ -333,11 +361,17 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             f.render_widget(stats_block, dashboard_layout[0]);
             
             // Pie Chart / Time Breakdown Table
-            let mut project_stats: Vec<(&String, &f64)> = time_per_project.iter().collect();
-            project_stats.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
-            
             use ratatui::widgets::{Table, Row, Cell};
             let mut table_rows = Vec::new();
+            
+            table_rows.push(Row::new(vec![
+                Cell::from("★ ALL PROJECTS").style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Cell::from(total_commits.to_string()),
+                Cell::from(format!("{:.1}h", total_hours)),
+                Cell::from(format!("{:.2}d", total_hours / app.config.working_day_hours)),
+                Cell::from("100.0%"),
+            ]));
+            
             for (p_name, &p_hours) in project_stats {
                 let p_commits = commits_per_project.get(p_name).unwrap_or(&0);
                 let p_days = p_hours / app.config.working_day_hours;
@@ -360,12 +394,20 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 Constraint::Percentage(15),
             ])
             .header(Row::new(vec!["Project (Time Breakdown)", "Commits", "Hours Spent", "Days Spent", "% of Total"]).style(Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))
-            .block(Block::default().borders(Borders::ALL).title("Time Spent Breakdown").border_style(Style::default().fg(Color::Blue)));
+            .block(Block::default().borders(Borders::ALL).title("Time Spent Breakdown (Use j/k to filter chart)").border_style(Style::default().fg(Color::Blue)))
+            .highlight_style(Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD))
+            .highlight_symbol(">> ");
             
-            f.render_widget(table, dashboard_layout[1]);
+            f.render_stateful_widget(table, dashboard_layout[1], &mut app.dashboard_list_state);
+            
+            let barchart_title = if let Some(ref sp) = selected_project_name {
+                format!("Activity Timeline for '{}' (Commits per Day)", sp)
+            } else {
+                "Global Activity Timeline (Commits per Day)".to_string()
+            };
             
             let barchart = ratatui::widgets::BarChart::default()
-                .block(Block::default().title("Activity Timeline (Commits per Day)").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)))
+                .block(Block::default().title(barchart_title).borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)))
                 .data(&display_data)
                 .bar_width(12)
                 .bar_gap(2)

@@ -83,6 +83,9 @@ pub struct App {
     pub projects_area: Option<Rect>,
     pub commits_area: Option<Rect>,
     pub commit_list_map: Vec<(usize, Option<usize>, Option<usize>, Option<usize>)>,
+    
+    pub dashboard_list_state: ratatui::widgets::TableState,
+    
     pub sources: Vec<PathBuf>,
     pub projects: Vec<ProjectData>,
     pub project_list_state: ListState,
@@ -123,6 +126,9 @@ impl App {
             projects_area: None,
             commits_area: None,
             commit_list_map: Vec::new(),
+            
+            dashboard_list_state: ratatui::widgets::TableState::default(),
+            
             sources: vec![PathBuf::from(".")],
             projects: Vec::new(),
             project_list_state: ListState::default(),
