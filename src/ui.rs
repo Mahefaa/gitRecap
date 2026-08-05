@@ -376,7 +376,12 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                     }
                 }
                 if !bars.is_empty() {
-                    bar_groups.push(BarGroup::default().label(Line::from(key.as_str())).bars(&bars));
+                    let display_label = match app.dashboard_resolution {
+                        crate::app::TimeResolution::Day => if key.len() >= 10 { &key[5..10] } else { key.as_str() }, // "07-10"
+                        crate::app::TimeResolution::Week => if key.len() >= 4 { &key[2..] } else { key.as_str() }, // "26-W30"
+                        crate::app::TimeResolution::Month => if key.len() >= 7 { &key[2..7] } else { key.as_str() }, // "26-07"
+                    };
+                    bar_groups.push(BarGroup::default().label(Line::from(display_label)).bars(&bars));
                 }
             }
             
@@ -475,9 +480,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             // Wait, `data` takes `impl IntoIterator<Item = BarGroup>`.
             let mut barchart = ratatui::widgets::BarChart::default()
                 .block(Block::default().title(barchart_block_title).borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)))
-                .bar_width(3) // narrower bars for a lighter look
+                .bar_width(4) // slightly wider than 3 for better visibility
                 .bar_gap(1)
-                .group_gap(5) // larger gap between different dates to prevent clutter
+                .group_gap(6) // prevents even the shortened labels from overlapping
                 .value_style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD));
             
             for group in bar_groups {
