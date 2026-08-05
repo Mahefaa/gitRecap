@@ -1,6 +1,0 @@
-modal on quit
-help thing looks weird
-must be able to collapse by date, branch, with normal collapse logic, implement things like commands too like vim : cp collapse project, :cb coll branch, :cm coll commit, top and bottom page shortcut,
-in nav, add option to not show 0 commits and if 0 commits, rather show last committed on
-where is the save button ? test profile switch
-group by date before branch

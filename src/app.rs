@@ -17,6 +17,7 @@ pub enum AppMode {
     FileExplorer,
     ConfirmPush { force: bool },
     InputAddSource,
+    InputExportPath,
     ExplorerJumpPath,
     InputBranch,
     CommitsView,
@@ -432,11 +433,29 @@ impl App {
                     }
                 }
             }
+            "noprank" => {
+                self.config.no_prank = true;
+                self.config.save();
+                self.flash_message = Some("Prank disabled. Theme reverted to normal.".to_string());
+            }
+            "prank" => {
+                self.config.no_prank = false;
+                self.config.save();
+                self.flash_message = Some("Pride mode activated! 🌈".to_string());
+            }
             "q!" => { self.should_quit = true; }
             "w" | "export" => {
                 if arg.is_empty() {
                     self.flash_message = Some("Filename required for export".to_string());
                 } else {
+                    let p = std::path::Path::new(arg);
+                    if let Some(parent) = p.parent() {
+                        let parent_str = parent.to_string_lossy().to_string();
+                        if !parent_str.is_empty() {
+                            self.config.default_export_path = Some(parent_str);
+                            self.config.save();
+                        }
+                    }
                     self.export_summary(arg);
                 }
             }
@@ -771,6 +790,20 @@ impl App {
                     return;
                 }
             }
+            AppMode::InputExportPath => {
+                let export_path = self.input.value().trim().replace("\\", "/");
+                if !export_path.is_empty() {
+                    let p = std::path::Path::new(&export_path);
+                    if let Some(parent) = p.parent() {
+                        let parent_str = parent.to_string_lossy().to_string();
+                        if !parent_str.is_empty() {
+                            self.config.default_export_path = Some(parent_str);
+                            self.config.save();
+                        }
+                    }
+                    self.export_summary(&export_path);
+                }
+            }
             _ => {}
         }
         self.mode = AppMode::Normal;
@@ -834,10 +867,6 @@ impl App {
         use std::path::Path;
 
         let file_path = Path::new(filename);
-        if file_path.components().any(|c| matches!(c, std::path::Component::ParentDir | std::path::Component::RootDir)) {
-            self.flash_message = Some("Path traversal and absolute paths are forbidden for security. Use a simple filename.".into());
-            return;
-        }
         
         let path = match std::env::current_dir() {
             Ok(cwd) => cwd.join(file_path),

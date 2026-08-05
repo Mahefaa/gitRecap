@@ -44,6 +44,10 @@ impl Default for AppProfile {
 pub struct AppConfig {
     pub active_profile: String,
     pub profiles: Vec<AppProfile>,
+    #[serde(default)]
+    pub default_export_path: Option<String>,
+    #[serde(default)]
+    pub no_prank: bool,
 }
 
 impl AppConfig {
@@ -58,15 +62,23 @@ impl AppConfig {
 
     pub fn load() -> Self {
         let path = Self::get_config_path();
-        if path.exists()
-            && let Ok(data) = fs::read_to_string(&path)
-                && let Ok(config) = serde_json::from_str(&data) {
-                    return config;
-                }
-        
-        Self {
-            active_profile: "default".to_string(),
-            profiles: vec![AppProfile::default()],
+        if path.exists() && let Ok(data) = fs::read_to_string(&path) {
+            match serde_json::from_str(&data) {
+                Ok(c) => c,
+                Err(_) => Self {
+                    active_profile: "default".to_string(),
+                    profiles: vec![AppProfile::default()],
+                    default_export_path: None,
+                    no_prank: false,
+                },
+            }
+        } else {
+            Self {
+                active_profile: "default".to_string(),
+                profiles: vec![AppProfile::default()],
+                default_export_path: None,
+                no_prank: false,
+            }
         }
     }
 

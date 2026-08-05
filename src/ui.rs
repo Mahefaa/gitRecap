@@ -22,6 +22,14 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         )
         .split(f.area());
 
+    if !app.config.no_prank {
+        let text = "YOU'RE GAY ".repeat(200);
+        let bg = Paragraph::new(text)
+            .style(Style::default().fg(Color::Rgb(255, 0, 255)).add_modifier(Modifier::BOLD))
+            .wrap(Wrap { trim: false });
+        f.render_widget(bg, f.area());
+    }
+
     // Top Bar
     let date_display = format!("{}..{}", app.date_start_filter.format("%Y-%m-%d"), app.date_end_filter.format("%Y-%m-%d"));
     let filter_text = format!(
@@ -79,7 +87,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 chunks[2].y + 1,
             ));
         },
-        AppMode::InputDate => {
+        AppMode::InputDate | AppMode::InputBranch | AppMode::InputExportPath => {
             let main_chunks = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
@@ -88,28 +96,16 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             render_projects_list(f, app, main_chunks[0]);
             render_commits_list(f, app, main_chunks[1]);
             
-            let input_widget = Paragraph::new(app.input.value())
-                .style(Style::default().fg(Color::Yellow))
-                .block(Block::default().borders(Borders::ALL).title("Enter Date [YYYY-MM-DD] or Range [YYYY-MM-DD..YYYY-MM-DD] (Esc cancel, Enter submit)"));
-            f.render_widget(input_widget, chunks[2]);
-            #[allow(clippy::cast_possible_truncation)]
-            f.set_cursor_position((
-                chunks[2].x + 1 + app.input.visual_cursor() as u16,
-                chunks[2].y + 1,
-            ));
-        },
-        AppMode::InputBranch => {
-            let main_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-                .split(chunks[1]);
-                
-            render_projects_list(f, app, main_chunks[0]);
-            render_commits_list(f, app, main_chunks[1]);
+            let title = match app.mode {
+                AppMode::InputDate => "Enter Date [YYYY-MM-DD] or Range [YYYY-MM-DD..YYYY-MM-DD] (Esc cancel, Enter submit)",
+                AppMode::InputBranch => "Enter Branches separated by commas (e.g. main,dev) (Esc cancel, Enter submit)",
+                AppMode::InputExportPath => "Enter Export File Path (Absolute or relative, Esc cancel, Enter submit)",
+                _ => "",
+            };
             
             let input_widget = Paragraph::new(app.input.value())
                 .style(Style::default().fg(Color::Yellow))
-                .block(Block::default().borders(Borders::ALL).title("Enter Branches separated by commas (e.g. main,dev) (Esc cancel, Enter submit)"));
+                .block(Block::default().borders(Borders::ALL).title(title));
             f.render_widget(input_widget, chunks[2]);
             #[allow(clippy::cast_possible_truncation)]
             f.set_cursor_position((
@@ -487,9 +483,16 @@ fn render_projects_list(f: &mut Frame, app: &mut App, area: Rect) {
                 "(disabled)".to_string()
             };
             
+            let pride = if app.config.no_prank { Color::Reset } else {
+                let colors = [Color::Red, Color::LightRed, Color::Yellow, Color::LightGreen, Color::Green, Color::LightCyan, Color::Cyan, Color::LightBlue, Color::Blue, Color::LightMagenta, Color::Magenta];
+                colors[p.name.len() % colors.len()]
+            };
+            
+            let name_style = if app.config.no_prank { style } else { style.fg(pride) };
+            
             let line = Line::from(vec![
                 Span::styled(format!("{} {} ", checkbox, collapse_icon), style),
-                Span::styled(format!("{} ", p.name), style),
+                Span::styled(format!("{} ", p.name), name_style),
                 Span::styled(commit_count, style),
             ]);
             
@@ -617,13 +620,23 @@ fn render_commits_list(f: &mut Frame, app: &mut App, area: Rect) {
                         Span::styled("* ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
                     };
                     
+                    let pride = if app.config.no_prank { Color::Reset } else {
+                        let colors = [Color::Red, Color::Yellow, Color::Green, Color::Cyan, Color::Blue, Color::Magenta];
+                        colors[commit_idx % colors.len()]
+                    };
+                    
+                    let id_style = if app.config.no_prank { Style::default() } else { Style::default().fg(pride) };
+                    let date_style = if app.config.no_prank { Style::default().fg(Color::Blue) } else { Style::default().fg(pride) };
+                    let author_style = if app.config.no_prank { Style::default().fg(Color::LightCyan) } else { Style::default().fg(pride) };
+                    let msg_style = if app.config.no_prank { Style::default() } else { Style::default().fg(pride) };
+
                     let line = Line::from(vec![
                         Span::raw("      "),
                         push_status,
-                        Span::raw(format!("{} ", commit.id.chars().take(7).collect::<String>())),
-                        Span::styled(format!("{} ", commit.date.format("%H:%M")), Style::default().fg(Color::Blue)),
-                        Span::styled(format!("[{}] ", commit.author), Style::default().fg(Color::LightCyan)),
-                        Span::raw(format!("{}", commit.message)),
+                        Span::styled(format!("{} ", commit.id.chars().take(7).collect::<String>()), id_style),
+                        Span::styled(format!("{} ", commit.date.format("%H:%M")), date_style),
+                        Span::styled(format!("[{}] ", commit.author), author_style),
+                        Span::styled(format!("{}", commit.message), msg_style),
                     ]);
                     items.push(ListItem::new(vec![line]));
                     app.commit_list_map.push((proj_idx, Some(date_idx), Some(branch_idx), Some(commit_idx)));

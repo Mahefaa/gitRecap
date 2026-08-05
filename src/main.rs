@@ -12,7 +12,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{error::Error, io::{self, BufWriter}};
-use tui_input::backend::crossterm::EventHandler;
+use tui_input::{backend::crossterm::EventHandler, Input};
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -167,7 +167,16 @@ fn run_app(
                             app.diff_scroll = app.diff_scroll.saturating_sub(5);
                         }
                         KeyCode::Char('e') => {
-                            app.export_summary("summary.txt");
+                            app.mode = AppMode::InputExportPath;
+                            let date_str = chrono::Local::now().format("%Y-%m-%d").to_string();
+                            let default_filename = format!("{}.md", date_str);
+                            let initial_value = if let Some(path) = &app.config.default_export_path {
+                                let path = std::path::PathBuf::from(path).join(&default_filename);
+                                path.to_string_lossy().into_owned()
+                            } else {
+                                default_filename
+                            };
+                            app.input = Input::default().with_value(initial_value);
                         }
                         KeyCode::Char('c') => app.toggle_expand_from_commits_view(),
                         KeyCode::Char('/') => {
@@ -244,7 +253,7 @@ fn run_app(
                         _ => {}
                     }
                 },
-                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::Command => {
+                AppMode::InputDate | AppMode::InputProfile | AppMode::InputAddSource | AppMode::InputExportPath | AppMode::ExplorerJumpPath | AppMode::InputBranch | AppMode::Command => {
                     match key.code {
                         KeyCode::Enter => app.submit_input(),
                         KeyCode::Esc => app.cancel_input(),
